@@ -43,13 +43,18 @@ function relTime(iso) {
 const shortDate = (iso) =>
   new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
+/**
+ * Counts a number up to its target. The final value is written immediately and
+ * the animation only plays over the top: requestAnimationFrame is throttled in
+ * background tabs, and painting solely from inside the callback used to leave
+ * every figure showing 0 until the tab was focused.
+ */
 function countUp(el, to, render) {
   const from = Number(el.dataset.v || 0);
   el.dataset.v = to;
-  if (from === to || reduceMotion) {
-    el.innerHTML = render(to);
-    return;
-  }
+  el.innerHTML = render(to);
+  if (from === to || reduceMotion) return;
+
   const dur = 700;
   const t0 = performance.now();
   const step = (t) => {
@@ -709,23 +714,61 @@ function showSynced(iso) {
 
 let last = null;
 
-/* Polling is silent: the page refreshes itself every minute, on tab focus, and
-   after a theme change, so there is no status pill or manual refresh control.
-   The footer timestamp is the freshness signal, and errbar surfaces failures. */
+/* Reloading the page must not count as a sync, so the last payload is kept in
+   localStorage with the time it was fetched. Within the hour a reload renders
+   straight from that copy and makes no request at all, which is why the Last
+   synced stamp keeps showing the original time instead of jumping to now.
+   Bump CACHE_V whenever the payload shape changes, so old copies are discarded. */
+const CACHE_KEY = 'bootdev-progress-cache';
+const CACHE_V = 1;
+
+function readCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_KEY));
+    if (!c || c.v !== CACHE_V || !c.payload || !c.fetchedAt) return null;
+    // Guard against a clock that moved backwards.
+    if (c.fetchedAt > Date.now()) return null;
+    return c;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(payload) {
+  try {
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({ v: CACHE_V, fetchedAt: Date.now(), payload })
+    );
+  } catch {
+    /* storage full or blocked: caching is an optimisation, not a requirement */
+  }
+}
+
+function reveal() {
+  $('boot').hidden = true;
+  $('app').hidden = false;
+}
+
+/* Silent by design: no status pill, no manual refresh. The Last synced stamp is
+   the freshness signal and errbar surfaces failures. */
 async function load(fresh = false) {
   try {
     const res = await fetch(`/api/progress${fresh ? '?fresh=1' : ''}`);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     last = data;
+    writeCache(data);
+    // Reveal first: charts built inside a hidden container measure zero.
+    reveal();
     render(data);
-    $('boot').hidden = true;
-    $('app').hidden = false;
     $('errbar').hidden = true;
   } catch (err) {
     const bar = $('errbar');
     bar.textContent = `Could not reach boot.dev: ${err.message}`;
     bar.hidden = false;
+    // A failed poll must not leave a blank page when a cached copy exists.
+    if (last) reveal();
   }
 }
 
@@ -812,10 +855,38 @@ setInterval(() => {
   if (last) $('syncedRel').textContent = relTime(last.updatedAt);
 }, 60_000);
 
-// The hourly tick is the only refetch. Deliberately nothing on tab focus: a
-// background tab may have its timers throttled, so the display can lag behind,
-// and the Last synced stamp is what makes that visible. Recording is unaffected
-// either way, because the Worker's cron writes history server-side every hour.
-setInterval(() => load(), REFRESH_MS);
+/* The hourly tick is the only refetch. Deliberately nothing on tab focus and
+   nothing on reload while the cached copy is still inside the hour, so the sync
+   cadence is genuinely hourly rather than once per page view.
 
-load();
+   A background tab may have its timers throttled, so the display can lag; the
+   Last synced stamp makes that visible. Recorded history is unaffected either
+   way, because the Worker's cron writes it server-side every hour. */
+function scheduleNext(delay) {
+  setTimeout(async () => {
+    await load();
+    scheduleNext(REFRESH_MS);
+  }, Math.max(0, delay));
+}
+
+const cached = readCache();
+const age = cached ? Date.now() - cached.fetchedAt : Infinity;
+// Escape hatch, since there is no refresh button: loading /?fresh=1 skips both
+// the cached copy and the Worker's own cache.
+const forceFresh = new URLSearchParams(location.search).get('fresh') === '1';
+
+if (!forceFresh && age < REFRESH_MS) {
+  try {
+    last = cached.payload;
+    // Reveal first: charts built inside a hidden container measure zero.
+    reveal();
+    render(last);
+    // Resume the existing cycle rather than starting a fresh hour.
+    scheduleNext(REFRESH_MS - age);
+  } catch {
+    // A cached payload from an incompatible build: fetch instead.
+    load().then(() => scheduleNext(REFRESH_MS));
+  }
+} else {
+  load(forceFresh).then(() => scheduleNext(REFRESH_MS));
+}

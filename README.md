@@ -137,7 +137,14 @@ distinguishable for colorblind readers.
 ## How it stays current
 
 The page refetches **once an hour**, matching the Worker cron. That is the only
-trigger: nothing refreshes on tab focus, and there is no manual refresh control.
+trigger. Nothing refreshes on tab focus, there is no manual refresh control, and
+**reloading the page does not sync either**: the last payload is cached in
+`localStorage` with the time it was fetched, so a reload inside the hour renders
+from that copy and makes no request. The hourly cycle resumes where it left off
+rather than restarting.
+
+To force a sync, load **`/?fresh=1`**, which skips both the cached copy and the
+Worker's own cache.
 
 The **Last synced** stamp in the header shows the wall-clock time of the last
 successful fetch, in the **viewer's own device timezone**, plus how long ago that
