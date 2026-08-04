@@ -96,6 +96,9 @@ body {
   gap: 18px; color: var(--muted);
 }
 .boot[hidden] { display: none; }
+/* Set by the inline head script when a cached payload will be rendered, so the
+   "fetching" screen never appears for a reload that makes no request. */
+.from-cache .boot { display: none; }
 .boot-spinner {
   width: 32px; height: 32px;
   border: 3px solid var(--border);

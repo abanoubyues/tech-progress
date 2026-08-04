@@ -7,6 +7,22 @@
 <link rel="stylesheet" href="/styles.css" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🥾</text></svg>" />
 <script src="/vendor/chart.umd.js"></script>
+<script>
+  /* Runs before the body paints. When a cached payload is going to be used, the
+     boot screen would otherwise flash "Fetching progress from boot.dev" on every
+     reload and look exactly like a sync that did not happen. Mirrors the cache
+     rules in app.js (CACHE_V, CACHE_KEY, REFRESH_MS). */
+  try {
+    var c = JSON.parse(localStorage.getItem('bootdev-progress-cache'));
+    var forced = new URLSearchParams(location.search).get('fresh') === '1';
+    if (!forced && c && c.v === 1 && c.fetchedAt && c.fetchedAt <= Date.now() &&
+        Date.now() - c.fetchedAt < 3600000) {
+      document.documentElement.classList.add('from-cache');
+    }
+  } catch (e) {
+    /* no cache usable: the boot screen is accurate, leave it visible */
+  }
+</script>
 </head>
 <body>
 
