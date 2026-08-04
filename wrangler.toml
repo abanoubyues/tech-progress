@@ -4,7 +4,9 @@
 #   1. `name`            the subdomain, e.g. bootdev-progress.<you>.workers.dev
 #   2. kv_namespaces id  created by: npx wrangler kv namespace create HISTORY
 
-name = "bootdev-progress"
+# The host is <name>.<account subdomain>.workers.dev, so a short name here is the
+# only part shortenable from code. The subdomain itself is a dashboard setting.
+name = "tech"
 main = "src/worker.js"
 compatibility_date = "2026-06-01"
 

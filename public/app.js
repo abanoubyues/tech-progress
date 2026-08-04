@@ -693,13 +693,10 @@ function render(d) {
 
 let last = null;
 
+/* Polling is silent: the page refreshes itself every minute, on tab focus, and
+   after a theme change, so there is no status pill or manual refresh control.
+   The footer timestamp is the freshness signal, and errbar surfaces failures. */
 async function load(fresh = false) {
-  const live = $('live');
-  const btn = $('refresh');
-  live.classList.add('busy');
-  $('liveText').textContent = 'syncing';
-  if (fresh) btn.classList.add('spin');
-
   try {
     const res = await fetch(`/api/progress${fresh ? '?fresh=1' : ''}`);
     const data = await res.json();
@@ -713,16 +710,10 @@ async function load(fresh = false) {
     const bar = $('errbar');
     bar.textContent = `Could not reach boot.dev: ${err.message}`;
     bar.hidden = false;
-  } finally {
-    live.classList.remove('busy');
-    $('liveText').textContent = 'live';
-    btn.classList.remove('spin');
   }
 }
 
 /* ------------------------------------------------------------ listeners */
-
-$('refresh').addEventListener('click', () => load(true));
 
 /* ---------------------------------------------------------------- theme */
 
