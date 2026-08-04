@@ -136,11 +136,22 @@ distinguishable for colorblind readers.
 
 ## How it stays current
 
-The page re-polls itself every 60 seconds and whenever you return to the tab.
-There is no status pill or manual refresh control: the **Last synced** stamp in
-the header shows the wall-clock time of the last successful fetch plus how long
-ago that was, and a red bar appears if a fetch fails. Profile data is cached for
-60s and the curriculum for 6h, so polling is cheap.
+The page refetches **once an hour**, matching the Worker cron. That is the only
+trigger: nothing refreshes on tab focus, and there is no manual refresh control.
+
+The **Last synced** stamp in the header shows the wall-clock time of the last
+successful fetch, in the **viewer's own device timezone**, plus how long ago that
+was. The relative part re-renders every minute without any network request, and a
+red bar appears if a fetch fails.
+
+One consequence worth knowing: browsers throttle timers in background tabs, so a
+tab left open for a long time can sync late and the stamp will show it (for
+example "4h ago"). That affects only the display. Recorded history is unaffected,
+because the Worker's hourly cron writes it server-side whether or not any tab is
+open. Reloading the page always fetches immediately.
+
+Server-side, profile data is cached for 60s and the curriculum for 6h, so a
+reload is cheap.
 
 Data comes from boot.dev's public endpoints:
 

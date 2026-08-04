@@ -3,7 +3,9 @@
    Every chart reads its colors from the CSS custom properties so light and dark
    mode stay in sync with the stylesheet rather than hardcoding hex here. */
 
-const REFRESH_MS = 60_000;
+// Hourly, matching the Worker's cron. boot.dev totals move slowly, so polling
+// more often just spends requests without showing anything new.
+const REFRESH_MS = 60 * 60 * 1000;
 const $ = (id) => document.getElementById(id);
 
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -697,9 +699,10 @@ function showSynced(iso) {
     minute: '2-digit',
   });
   $('syncedRel').textContent = relTime(iso);
+  // toLocaleString with no timeZone renders in the viewer's own device timezone.
   $('synced').title =
-    `Last synced ${at.toLocaleString()}. ` +
-    'The page refreshes itself every minute and whenever you return to the tab.';
+    `Last synced ${at.toLocaleString()} (your device time). ` +
+    'The page refreshes itself once an hour.';
 }
 
 /* ---------------------------------------------------------------- fetch */
@@ -804,14 +807,15 @@ window.addEventListener('resize', () => {
   }, 180);
 });
 
-// Keep the "ago" part honest between polls.
+// Keep the "ago" part honest between polls. Text only, no network.
 setInterval(() => {
   if (last) $('syncedRel').textContent = relTime(last.updatedAt);
-}, 15_000);
+}, 60_000);
 
+// The hourly tick is the only refetch. Deliberately nothing on tab focus: a
+// background tab may have its timers throttled, so the display can lag behind,
+// and the Last synced stamp is what makes that visible. Recording is unaffected
+// either way, because the Worker's cron writes history server-side every hour.
 setInterval(() => load(), REFRESH_MS);
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) load();
-});
 
 load();
