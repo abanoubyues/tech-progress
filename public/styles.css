@@ -43,11 +43,9 @@
   --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-/* Light palette. Declared twice on purpose: once for the OS preference (unless
-   the viewer has forced dark) and once for an explicit light stamp, so the
-   in-page toggle can beat an OS that says dark. Keep the two blocks in sync. */
+/* Light palette. The page follows the OS setting; there is no in-page toggle. */
 @media (prefers-color-scheme: light) {
-  :root:where(:not([data-theme="dark"])) {
+  :root {
     color-scheme: light;
     --plane:       #f9f9f7;
     --surface:     #fcfcfb;
@@ -72,28 +70,6 @@
     --axis:        #c3c2b7;
     --shadow:      0 1px 2px rgba(11,11,11,0.05), 0 8px 24px rgba(11,11,11,0.06);
   }
-}
-:root[data-theme="light"] {
-  color-scheme: light;
-  --plane:       #f9f9f7;
-  --surface:     #fcfcfb;
-  --surface-2:   #f2f2ee;
-  --border:      rgba(11, 11, 11, 0.12);
-  --border-soft: rgba(11, 11, 11, 0.08);
-  --ink:         #0b0b0b;
-  --ink-2:       #45443f;
-  --muted:       #63625c;
-  --series-1:    #2a78d6;
-  --series-2:    #eb6834;
-  --series-3:    #1baf7a;
-  --good:        #0ca30c;
-  --warning:     #fab219;
-  --accent-text:  #1c5cab;
-  --good-text:    #006300;
-  --warning-text: #7a5200;
-  --grid:        #e1e0d9;
-  --axis:        #c3c2b7;
-  --shadow:      0 1px 2px rgba(11,11,11,0.05), 0 8px 24px rgba(11,11,11,0.06);
 }
 
 * { box-sizing: border-box; }
@@ -173,17 +149,24 @@ body {
   outline: 2px solid var(--series-1); outline-offset: 2px;
 }
 
-/* Same reasoning: Auto / Light / Dark are different widths, so the box is fixed
-   and the label is centred inside it. */
-.btn-theme {
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  font-size: 12px; font-weight: 600; color: var(--ink-2);
+/* Read-only freshness stamp. Fixed width so the box does not twitch as the
+   relative part changes from "just now" to "12m ago". */
+.synced {
+  display: flex; flex-direction: column; gap: 2px;
   box-sizing: border-box;
-  height: 38px; width: 104px; padding: 0 12px;
-  white-space: nowrap;
+  min-width: 148px; padding: 7px 13px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-align: right; cursor: default;
 }
-.theme-ico { font-size: 14px; line-height: 1; flex: none; }
-#themeLabel { flex: none; }
+.synced-cap {
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+}
+.synced-val {
+  font-size: 13px; font-weight: 600; color: var(--ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.synced-rel { font-weight: 500; color: var(--muted); }
 
 /* ----------------------------------------------------------- path facts */
 

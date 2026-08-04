@@ -41,10 +41,10 @@
     </div>
 
     <div class="topbar-right">
-      <button id="theme" class="btn btn-theme" title="Switch between automatic, light and dark">
-        <span class="theme-ico" id="themeIco" aria-hidden="true">◐</span>
-        <span id="themeLabel">Auto</span>
-      </button>
+      <div class="synced" id="synced" title="The page refreshes itself every minute and whenever you return to the tab">
+        <span class="synced-cap">Last synced</span>
+        <span class="synced-val"><span id="syncedTime">--:--</span> <span class="synced-rel" id="syncedRel"></span></span>
+      </div>
     </div>
   </header>
 
@@ -307,7 +307,6 @@
   </div>
 
   <footer class="foot">
-    <span id="updated"></span>
     <span>Live data from boot.dev public endpoints</span>
     <a id="footLink" href="#" target="_blank" rel="noreferrer">View profile</a>
   </footer>

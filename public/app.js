@@ -686,7 +686,20 @@ function render(d) {
     .join('');
   $('streakAchNote').textContent = s && s.days !== null ? `currently at ${s.days} days` : '';
 
-  $('updated').textContent = `Updated ${relTime(d.updatedAt)}`;
+  showSynced(d.updatedAt);
+}
+
+/** Wall-clock time of the last successful fetch, plus how long ago that was. */
+function showSynced(iso) {
+  const at = new Date(iso);
+  $('syncedTime').textContent = at.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  $('syncedRel').textContent = relTime(iso);
+  $('synced').title =
+    `Last synced ${at.toLocaleString()}. ` +
+    'The page refreshes itself every minute and whenever you return to the tab.';
 }
 
 /* ---------------------------------------------------------------- fetch */
@@ -714,52 +727,6 @@ async function load(fresh = false) {
 }
 
 /* ------------------------------------------------------------ listeners */
-
-/* ---------------------------------------------------------------- theme */
-
-/* Auto follows the operating system; light and dark override it. The choice is
-   remembered, so it survives a reload. */
-const THEME_KEY = 'bootdev-theme';
-const THEME_ORDER = ['auto', 'light', 'dark'];
-const THEME_ICON = { auto: '◐', light: '☀', dark: '☾' };
-const THEME_NAME = { auto: 'Auto', light: 'Light', dark: 'Dark' };
-
-function applyTheme(mode) {
-  if (mode === 'auto') document.documentElement.removeAttribute('data-theme');
-  else document.documentElement.setAttribute('data-theme', mode);
-  try {
-    localStorage.setItem(THEME_KEY, mode);
-  } catch {
-    /* private browsing, not worth failing over */
-  }
-  $('themeIco').textContent = THEME_ICON[mode];
-  $('themeLabel').textContent = THEME_NAME[mode];
-  const resolved =
-    mode === 'auto'
-      ? window.matchMedia('(prefers-color-scheme: light)').matches
-        ? 'light'
-        : 'dark'
-      : mode;
-  $('theme').title = `Theme: ${THEME_NAME[mode]}${
-    mode === 'auto' ? ` (currently ${resolved})` : ''
-  }. Click to change.`;
-  // Chart colors are read from CSS, so they need a rebuild after a theme change.
-  if (last) buildCharts(last);
-}
-
-let themeMode = 'auto';
-try {
-  const saved = localStorage.getItem(THEME_KEY);
-  if (THEME_ORDER.includes(saved)) themeMode = saved;
-} catch {
-  /* ignore */
-}
-applyTheme(themeMode);
-
-$('theme').addEventListener('click', () => {
-  themeMode = THEME_ORDER[(THEME_ORDER.indexOf(themeMode) + 1) % THEME_ORDER.length];
-  applyTheme(themeMode);
-});
 
 document.querySelectorAll('.tab').forEach((tab) => {
   tab.addEventListener('click', () => {
@@ -816,9 +783,10 @@ document.querySelectorAll('#roadTable thead th').forEach((th) => {
   });
 });
 
-// Rebuild charts when the OS theme flips, but only while following it.
+// The page follows the OS light/dark setting. Chart colors are read from CSS, so
+// they need rebuilding when that setting flips.
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-  if (themeMode === 'auto') applyTheme('auto');
+  if (last) buildCharts(last);
 });
 
 // Chart.js resizes its own canvas, but the doughnut legend has to move between
@@ -836,8 +804,9 @@ window.addEventListener('resize', () => {
   }, 180);
 });
 
+// Keep the "ago" part honest between polls.
 setInterval(() => {
-  if (last) $('updated').textContent = `Updated ${relTime(last.updatedAt)}`;
+  if (last) $('syncedRel').textContent = relTime(last.updatedAt);
 }, 15_000);
 
 setInterval(() => load(), REFRESH_MS);

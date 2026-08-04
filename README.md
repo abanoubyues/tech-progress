@@ -119,9 +119,8 @@ Three tabs:
 
 ## Light and dark mode
 
-The button in the top right cycles **Auto -> Light -> Dark**. Auto follows your
-operating system setting; Light and Dark override it. The choice is saved in
-`localStorage`, so it survives a reload.
+The theme is automatic: it follows your operating system setting, and switches
+live if you change that setting. There is no in-page toggle.
 
 Both modes are audited against WCAG AA (4.5:1 for normal text, 3:1 for large).
 Small text uses separate `--accent-text` / `--good-text` / `--warning-text`
@@ -137,10 +136,11 @@ distinguishable for colorblind readers.
 
 ## How it stays current
 
-The page re-polls itself every 60 seconds, on tab focus, and after a theme
-change. There is no status pill or manual refresh control: the footer timestamp
-is the freshness signal, and a red bar appears if a fetch fails. Profile data is
-cached for 60s and the curriculum for 6h, so polling is cheap.
+The page re-polls itself every 60 seconds and whenever you return to the tab.
+There is no status pill or manual refresh control: the **Last synced** stamp in
+the header shows the wall-clock time of the last successful fetch plus how long
+ago that was, and a red bar appears if a fetch fails. Profile data is cached for
+60s and the curriculum for 6h, so polling is cheap.
 
 Data comes from boot.dev's public endpoints:
 
