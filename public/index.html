@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>boot.dev · Back-end Path Progress</title>
+<link rel="stylesheet" href="/styles.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🥾</text></svg>" />
+<script src="/vendor/chart.umd.js"></script>
+</head>
+<body>
+
+<div id="boot" class="boot">
+  <div class="boot-spinner"></div>
+  <p>Fetching progress from boot.dev</p>
+</div>
+
+<div id="app" class="app" hidden>
+
+  <!-- ---------------------------------------------------------- header -->
+  <header class="topbar">
+    <div class="who">
+      <div class="ring-avatar" id="avatarRing">
+        <svg viewBox="0 0 84 84" class="ring-svg" aria-hidden="true">
+          <circle class="ring-track" cx="42" cy="42" r="37" />
+          <circle class="ring-fill" cx="42" cy="42" r="37" id="lvlRing" />
+        </svg>
+        <div class="ring-mid">
+          <span class="ring-lvl" id="lvlNum">0</span>
+          <span class="ring-cap">lvl</span>
+        </div>
+      </div>
+      <div class="who-text">
+        <h1 id="name">Loading</h1>
+        <div class="who-sub">
+          <a id="handle" href="#" target="_blank" rel="noreferrer">@</a>
+          <span class="chip" id="role"></span>
+          <span class="chip chip-member" id="member" hidden>Member</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <div class="live" id="live" title="Auto-refreshes every 60 seconds">
+        <span class="live-dot"></span>
+        <span class="live-text" id="liveText">live</span>
+      </div>
+      <button id="theme" class="btn btn-theme" title="Switch between automatic, light and dark">
+        <span class="theme-ico" id="themeIco" aria-hidden="true">◐</span>
+        <span id="themeLabel">Auto</span>
+      </button>
+      <button id="refresh" class="btn btn-refresh" title="Refresh now" aria-label="Refresh now">
+        <span class="refresh-ico" aria-hidden="true">↻</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="path-line">
+    <span class="path-tag">Back-end Developer Path</span>
+    <dl class="path-facts">
+      <div><dt>Courses</dt><dd id="pfCourses">0</dd></div>
+      <div><dt>Lessons</dt><dd id="pfLessons">0</dd></div>
+      <div><dt>Est. hours</dt><dd id="pfHours">0</dd></div>
+      <div><dt>Suggested pace</dt><dd id="pfMonths">0</dd></div>
+    </dl>
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab is-on" role="tab" aria-selected="true" data-panel="overview">Overview</button>
+    <button class="tab" role="tab" aria-selected="false" data-panel="roadmap">
+      Roadmap <span class="tab-count" id="tabRoadCount"></span>
+    </button>
+    <button class="tab" role="tab" aria-selected="false" data-panel="achievements">
+      Achievements <span class="tab-count" id="tabAchCount"></span>
+    </button>
+  </nav>
+
+  <!-- ========================================================== OVERVIEW -->
+  <div id="panel-overview" class="panel">
+
+    <section class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Path complete</div>
+        <div class="kpi-value" id="kpiPct">0%</div>
+        <div class="kpi-change" id="kpiPctChange"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Lessons solved</div>
+        <div class="kpi-value" id="kpiLessons">0</div>
+        <div class="kpi-change" id="kpiLessonsChange"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Time spent <span class="est" title="Curriculum hour estimates, not tracked study time">est.</span></div>
+        <div class="kpi-value" id="kpiSpent">0h</div>
+        <div class="kpi-change" id="kpiSpentChange"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Time left <span class="est" title="Curriculum hour estimates, not tracked study time">est.</span></div>
+        <div class="kpi-value" id="kpiLeft">0h</div>
+        <div class="kpi-change" id="kpiLeftChange"></div>
+      </div>
+    </section>
+
+    <section class="hero">
+      <div class="card hero-ring-card">
+        <div class="big-ring">
+          <svg viewBox="0 0 200 200" aria-hidden="true">
+            <circle class="ring-track big" cx="100" cy="100" r="86" />
+            <circle class="ring-fill big" cx="100" cy="100" r="86" id="pathRing" />
+          </svg>
+          <div class="big-ring-mid">
+            <div class="big-pct" id="pathPct">0<span>%</span></div>
+            <div class="big-cap">of the path</div>
+          </div>
+        </div>
+        <dl class="ring-legend">
+          <div><dt>Lessons done</dt><dd id="lessonsDone">0</dd></div>
+          <div><dt>Lessons left</dt><dd id="lessonsLeft">0</dd></div>
+          <div><dt>Courses done</dt><dd id="coursesDone">0</dd></div>
+        </dl>
+      </div>
+
+      <div class="hero-side">
+        <section class="card current" id="currentCard">
+          <div class="sec-head">
+            <h2>Currently on</h2>
+            <span class="est" title="boot.dev does not publish per-lesson progress. This is derived from your lesson count and the path order.">estimated</span>
+          </div>
+          <div class="current-body">
+            <img id="curThumb" class="cur-thumb" alt="" />
+            <div class="current-main">
+              <h3 id="curTitle">Loading</h3>
+              <p id="curBlurb" class="muted"></p>
+              <div class="cur-chapter" id="curChapter"></div>
+              <div class="bar"><div class="bar-fill" id="curBar"></div></div>
+              <div class="bar-labels">
+                <span id="curLessons"></span>
+                <span id="curPct"></span>
+              </div>
+              <a id="curLink" class="btn btn-go" target="_blank" rel="noreferrer">Continue on boot.dev</a>
+            </div>
+          </div>
+        </section>
+
+        <div class="duo">
+          <section class="card tile streak-tile" id="streakTile">
+            <div class="streak-head">
+              <div>
+                <div class="kpi-label">
+                  Current streak
+                  <span class="est" title="boot.dev keeps the live streak counter behind login. This is pinned by your streak achievements and extended by daily tracking.">est.</span>
+                </div>
+                <div class="kpi-value streak-val">
+                  <span class="flame" aria-hidden="true">🔥</span><span id="streakDays">0</span><span class="u">days</span>
+                </div>
+                <div class="kpi-change" id="streakSub"></div>
+              </div>
+              <img class="streak-badge" id="streakBadge" alt="" />
+            </div>
+            <div class="bar streak-bar"><div class="bar-fill" id="streakBar"></div></div>
+            <div class="bar-labels">
+              <span id="streakNext"></span>
+              <span id="streakGoal"></span>
+            </div>
+          </section>
+
+          <section class="card tile">
+            <div class="kpi-label">
+              Projected finish
+              <span class="est" title="Derived from your recent daily pace, recorded locally">est.</span>
+            </div>
+            <div class="kpi-value" id="eta">n/a</div>
+            <div class="kpi-change" id="etaSub"></div>
+            <dl class="pace-row">
+              <div><dt>Lessons / day</dt><dd id="paceLessons">0</dd></div>
+              <div><dt>Hours / day</dt><dd id="paceHours">0</dd></div>
+              <div><dt>Today</dt><dd id="paceToday">0</dd></div>
+            </dl>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="chart-row">
+      <div class="card chart-container">
+        <div class="sec-head">
+          <h2>Lessons per day</h2>
+          <span class="muted" id="paceNote"></span>
+        </div>
+        <div class="chart-box"><canvas id="chartDaily"></canvas></div>
+        <p class="empty" id="emptyDaily" hidden>
+          Tracking starts now. This fills in as the dashboard records your totals each day.
+        </p>
+      </div>
+
+      <div class="card chart-container">
+        <div class="sec-head">
+          <h2>Cumulative lessons</h2>
+          <span class="muted">against the 1,278-lesson path</span>
+        </div>
+        <div class="chart-box"><canvas id="chartCumulative"></canvas></div>
+        <p class="empty" id="emptyCumulative" hidden>
+          Needs two days of recorded history before a trend line means anything.
+        </p>
+      </div>
+    </section>
+
+    <section class="chart-row">
+      <div class="card chart-container">
+        <div class="sec-head">
+          <h2>Hours remaining by language</h2>
+          <span class="muted">what is still ahead of you</span>
+        </div>
+        <div class="chart-box tall"><canvas id="chartLang"></canvas></div>
+      </div>
+
+      <div class="card chart-container">
+        <div class="sec-head">
+          <h2>Path make-up by course type</h2>
+          <span class="muted">share of total hours</span>
+        </div>
+        <div class="chart-box"><canvas id="chartType"></canvas></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- =========================================================== ROADMAP -->
+  <div id="panel-roadmap" class="panel" hidden>
+    <section class="card">
+      <div class="filters">
+        <div class="filter-group">
+          <label for="fStatus">Status</label>
+          <select id="fStatus"><option value="all">All</option></select>
+        </div>
+        <div class="filter-group">
+          <label for="fType">Type</label>
+          <select id="fType"><option value="all">All</option></select>
+        </div>
+        <div class="filter-group">
+          <label for="fLang">Language</label>
+          <select id="fLang"><option value="all">All</option></select>
+        </div>
+        <div class="filter-group grow">
+          <label for="fSearch">Search</label>
+          <input type="search" id="fSearch" placeholder="Course name" />
+        </div>
+        <!-- Column headers become sort controls on desktop; phones get this
+             instead, because the card layout hides the header row. -->
+        <div class="filter-group mobile-only">
+          <label for="fSort">Sort by</label>
+          <select id="fSort">
+            <option value="index">Path order</option>
+            <option value="title">Course</option>
+            <option value="type">Type</option>
+            <option value="language">Language</option>
+            <option value="lessons">Lessons</option>
+            <option value="hours">Hours</option>
+            <option value="xp">XP</option>
+            <option value="status">Status</option>
+            <option value="pct">Progress</option>
+          </select>
+        </div>
+        <button class="btn mobile-only" id="fSortDir" aria-label="Toggle sort direction">Ascending</button>
+        <button class="btn" id="fReset">Reset</button>
+      </div>
+      <p class="table-meta" id="tableMeta"></p>
+      <div class="table-scroll">
+        <table class="data-table" id="roadTable">
+          <thead>
+            <tr>
+              <th class="num" data-sort="index">#</th>
+              <th data-sort="title">Course</th>
+              <th data-sort="type">Type</th>
+              <th data-sort="language">Language</th>
+              <th class="num" data-sort="lessons">Lessons</th>
+              <th class="num" data-sort="hours">Hours</th>
+              <th class="num" data-sort="xp">XP</th>
+              <th data-sort="status">Status</th>
+              <th class="num" data-sort="pct">Progress</th>
+            </tr>
+          </thead>
+          <tbody id="roadBody"></tbody>
+        </table>
+      </div>
+      <p class="empty" id="emptyTable" hidden>No courses match these filters.</p>
+    </section>
+  </div>
+
+  <!-- ====================================================== ACHIEVEMENTS -->
+  <div id="panel-achievements" class="panel" hidden>
+    <section class="card">
+      <div class="sec-head">
+        <h2>Unlocked</h2>
+        <span class="muted" id="achCount"></span>
+      </div>
+      <div class="ach-grid" id="achGrid"></div>
+    </section>
+
+    <section class="card">
+      <div class="sec-head">
+        <h2>Next up</h2>
+        <span class="muted">closest milestones you have not earned yet</span>
+      </div>
+      <div class="ach-grid next" id="achNext"></div>
+    </section>
+
+    <section class="card">
+      <div class="sec-head">
+        <h2>Streak milestones</h2>
+        <span class="muted" id="streakAchNote"></span>
+      </div>
+      <div class="ach-grid" id="achStreak"></div>
+    </section>
+  </div>
+
+  <footer class="foot">
+    <span id="updated"></span>
+    <span>Live data from boot.dev public endpoints</span>
+    <a id="footLink" href="#" target="_blank" rel="noreferrer">View profile</a>
+  </footer>
+</div>
+
+<div id="errbar" class="errbar" hidden></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+# Cloudflare Worker config.
+#
+# Before the first deploy, two values need filling in (see README "Deploy"):
+#   1. `name`            the subdomain, e.g. bootdev-progress.<you>.workers.dev
+#   2. kv_namespaces id  created by: npx wrangler kv namespace create HISTORY
+
+name = "bootdev-progress"
+main = "src/worker.js"
+compatibility_date = "2026-06-01"
+
+# Serves everything in public/ (index.html, styles.css, app.js, vendor/chart.umd.js).
+# run_worker_first keeps /api/progress on the Worker instead of 404ing on assets.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
+
+# Daily history. Replaces history.json, which serverless has no disk for.
+[[kv_namespaces]]
+binding = "HISTORY"
+id = "8d7c868a810142ce8bf1f0b2423dafa1"
+
+# Records totals every hour so pace and streak stay accurate on days you do not
+# open the page. Writes only happen when a value actually changed.
+[triggers]
+crons = ["0 * * * *"]
+
+[vars]
+BOOTDEV_HANDLE = "the_baaneh"
+BOOTDEV_PATH = "backend"
+# Day boundaries for "today" and streak counting, so a day rolls over when yours
+# does rather than at UTC midnight.
+BOOTDEV_TZ = "Africa/Cairo"
+
+[observability]
+enabled = true
