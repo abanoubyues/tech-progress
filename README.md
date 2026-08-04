@@ -105,6 +105,25 @@ Comfortably inside them: Workers allow 100k requests/day, KV allows 1,000
 writes and 100k reads/day. The hourly cron is 24 runs/day, and most of those
 write nothing.
 
+## Icons and installing
+
+The favicon and app icons are the tree-of-life mark on solid black, generated
+from `assets/tree-of-life.png` into `public/icons/`. The generated files are
+committed; rebuild them only if the artwork changes:
+
+```bash
+npm install --no-save sharp png-to-ico && node scripts/build-icons.mjs
+```
+
+The source is transparent line art, so each size is flattened onto black. Insets
+differ per target because platforms crop differently: favicons and the PWA "any"
+icons nearly fill the square, the Apple touch icon leaves room for iOS corner
+rounding, and the maskable icons sit inside Android's central 80% safe zone so a
+circular or squircle mask never clips the ring.
+
+`manifest.webmanifest` makes it installable on phones and desktops, with black as
+both the theme and splash colour.
+
 ## Layout
 
 Three tabs:
