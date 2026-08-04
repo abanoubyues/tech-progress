@@ -115,11 +115,17 @@ committed; rebuild them only if the artwork changes:
 npm install --no-save sharp png-to-ico && node scripts/build-icons.mjs
 ```
 
-The source is transparent line art, so each size is flattened onto black. Insets
-differ per target because platforms crop differently: favicons and the PWA "any"
-icons nearly fill the square, the Apple touch icon leaves room for iOS corner
-rounding, and the maskable icons sit inside Android's central 80% safe zone so a
-circular or squircle mask never clips the ring.
+The icons are round badges: the black sits behind the artwork as a disc and the
+corners stay transparent, so they read as a circle rather than a square tile.
+
+Two exceptions are deliberate, because those platforms mask the icon themselves:
+
+- **Maskable (Android)** must fill the whole square, since the launcher crops it.
+  Its circular mask is what makes the installed icon round. The art sits inside
+  the central 80% safe zone so no mask shape clips the outer ring.
+- **Apple touch icon** is also full bleed. iOS composites transparency to black
+  and applies its own rounded-square mask, so a disc would just become a black
+  tile. iOS always shows a squircle; that cannot be changed from the icon.
 
 `manifest.webmanifest` makes it installable on phones and desktops, with black as
 both the theme and splash colour.

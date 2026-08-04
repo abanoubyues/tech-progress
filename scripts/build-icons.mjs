@@ -31,39 +31,72 @@ const trimmed = await sharp(SRC).trim({ threshold: 1 }).png().toBuffer();
 const meta = await sharp(trimmed).metadata();
 console.log(`source ${meta.width}x${meta.height} after trim`);
 
-async function icon(size, inset, file) {
+/**
+ * shape 'circle' puts the black behind the artwork only, as a disc, leaving the
+ * corners transparent so the icon reads as a round badge rather than a square
+ * tile. shape 'square' fills the whole canvas, which maskable icons need.
+ */
+async function icon(size, inset, file, shape = 'circle') {
   const inner = Math.round(size * inset);
   const art = await sharp(trimmed)
     .resize(inner, inner, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .toBuffer();
 
-  // Two passes on purpose: compositing alone leaves the transparent parts of the
-  // artwork transparent, so the result is flattened onto black afterwards to
-  // guarantee a solid background rather than a see-through icon.
-  const composed = await sharp({
-    create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
-  })
-    .composite([{ input: art, gravity: 'center' }])
-    .png()
-    .toBuffer();
-
   const dest = path.join(OUT, file);
-  await sharp(composed).flatten({ background: BLACK }).png({ compressionLevel: 9 }).toFile(dest);
+
+  if (shape === 'square') {
+    // Two passes on purpose: compositing alone leaves the transparent parts of
+    // the artwork transparent, so the result is flattened onto black to
+    // guarantee a solid background rather than a see-through icon.
+    const composed = await sharp({
+      create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    })
+      .composite([{ input: art, gravity: 'center' }])
+      .png()
+      .toBuffer();
+
+    await sharp(composed).flatten({ background: BLACK }).png({ compressionLevel: 9 }).toFile(dest);
+  } else {
+    // A hair larger than the artwork so no light pixel of the outer ring lands
+    // on a transparent edge and fringes.
+    const r = (inner / 2) * 1.01;
+    const disc = Buffer.from(
+      `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">` +
+        `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="#000000"/></svg>`
+    );
+
+    await sharp({
+      create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    })
+      .composite([
+        { input: await sharp(disc).png().toBuffer() },
+        { input: art, gravity: 'center' },
+      ])
+      .png({ compressionLevel: 9 })
+      .toFile(dest);
+  }
 
   const { size: bytes } = await fs.stat(dest);
   console.log(
-    `  ${file.padEnd(26)} ${size}x${size} inset ${Math.round(inset * 100)}% ${(bytes / 1024).toFixed(1)} KB`
+    `  ${file.padEnd(26)} ${size}x${size} ${shape.padEnd(6)} inset ${Math.round(inset * 100)}% ${(bytes / 1024).toFixed(1)} KB`
   );
 }
 
-await icon(16, 0.96, 'favicon-16.png');
-await icon(32, 0.96, 'favicon-32.png');
-await icon(48, 0.96, 'favicon-48.png');
-await icon(192, 0.94, 'icon-192.png');
-await icon(512, 0.94, 'icon-512.png');
-await icon(180, 0.88, 'apple-touch-icon.png');
-await icon(192, 0.72, 'icon-maskable-192.png');
-await icon(512, 0.72, 'icon-maskable-512.png');
+// Round badges: the black sits behind the art only, corners stay transparent.
+await icon(16, 0.98, 'favicon-16.png');
+await icon(32, 0.98, 'favicon-32.png');
+await icon(48, 0.98, 'favicon-48.png');
+await icon(192, 0.98, 'icon-192.png');
+await icon(512, 0.98, 'icon-512.png');
+
+// iOS composites transparency to black and applies its own rounded-square mask,
+// so a disc here would just become a black tile. Full bleed is honest about that.
+await icon(180, 0.9, 'apple-touch-icon.png', 'square');
+
+// Android crops maskable icons itself, so these must fill the square. Its
+// circular mask is what makes the launcher icon round.
+await icon(192, 0.72, 'icon-maskable-192.png', 'square');
+await icon(512, 0.72, 'icon-maskable-512.png', 'square');
 
 // Multi-resolution .ico for older browsers and Windows pinned sites.
 const ico = await pngToIco([16, 32, 48].map((s) => path.join(OUT, `favicon-${s}.png`)));
