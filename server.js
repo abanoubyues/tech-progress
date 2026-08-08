@@ -19,6 +19,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HANDLE = process.env.BOOTDEV_HANDLE || 'the_baaneh';
 const PATH_SLUG = process.env.BOOTDEV_PATH || 'backend';
 const TZ = process.env.BOOTDEV_TZ || 'UTC';
+const STREAK_SINCE = process.env.BOOTDEV_STREAK_SINCE || '';
 const PORT = Number(process.env.PORT) || 4173;
 
 const HISTORY = path.join(__dirname, 'history.json');
@@ -64,6 +65,7 @@ const server = http.createServer(async (req, res) => {
         handle: HANDLE,
         pathSlug: PATH_SLUG,
         tz: TZ,
+        streakSince: STREAK_SINCE,
         fresh: url.searchParams.get('fresh') === '1',
       });
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });

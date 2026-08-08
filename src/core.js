@@ -161,6 +161,8 @@ export function dayKey(date = new Date(), tz = 'UTC') {
   }).format(date);
 }
 
+const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 const keyToUTC = (key) => {
   const [y, m, d] = key.split('-').map(Number);
   return Date.UTC(y, m - 1, d);
@@ -265,61 +267,83 @@ function computePace(days, { hoursDone, lessonsDone, daysActive }, today) {
 /* ------------------------------------------------------------------- streak */
 
 /**
- * The live streak counter is behind auth, but the streak achievements are
- * public and pin it down: "study 8 days" unlocking on a known date means the
- * streak began 7 days earlier, and the next locked tier caps how high it can be.
- * Local history extends it forward and catches a break.
+ * The live streak counter and the ember balance that protects it are both
+ * behind auth: every public boot.dev endpoint exposes lifetime totals only.
+ * So the streak start is either told to us (`streakSince`) or estimated from
+ * the public streak achievements.
+ *
+ * The estimate is the weaker of the two. Achievement unlock times arrive in
+ * backfill batches (several share a timestamp to the millisecond), so "study
+ * 8 days" unlocking on a given date does not reliably place day one, and the
+ * derived start can sit a couple of days off either way. A start date supplied
+ * by config is therefore trusted over it, and over the locked-tier cap.
+ *
+ * Embers keep a streak alive through a day with no lessons, so a recorded gap
+ * day no longer restarts the count. Those days are tallied as `emberDays` and
+ * reported rather than silently absorbed.
  */
-function deriveStreak(achievements, days, today, tz) {
+function deriveStreak(achievements, days, today, tz, streakSince = '') {
   const streaks = (achievements || []).filter((a) => a.category === 'streak');
   const unlocked = streaks.filter((a) => a.unlockedAt);
   const nextTier = streaks
     .filter((a) => !a.unlockedAt)
     .sort((a, b) => a.unlockAtVal - b.unlockAtVal)[0];
+  const tier = nextTier
+    ? { title: nextTier.title, at: nextTier.unlockAtVal, thumb: nextTier.thumbnailURL }
+    : null;
+
+  const pinned = DAY_KEY_RE.test(streakSince) && keyToUTC(streakSince) <= keyToUTC(today);
 
   let startKey = null;
   let floor = 0;
-  if (unlocked.length) {
+  if (pinned) {
+    startKey = streakSince;
+  } else if (unlocked.length) {
     const best = unlocked.reduce((a, b) => (b.unlockAtVal > a.unlockAtVal ? b : a));
     floor = best.unlockAtVal;
     startKey = shiftKey(dayKey(new Date(best.unlockedAt), tz), -(best.unlockAtVal - 1));
   }
 
-  // A recorded past day with no lessons gained restarts the count.
+  if (!startKey) {
+    return {
+      days: null,
+      since: null,
+      floor: 0,
+      capped: false,
+      estimated: true,
+      pinned: false,
+      emberDays: 0,
+      nextTier: tier,
+    };
+  }
+
+  // Recorded days inside the streak that gained nothing: embers carried these.
+  let emberDays = 0;
   for (let i = 1; i < days.length; i++) {
     const cur = days[i];
     if (cur.date === today) continue;
-    if (cur.lessons - days[i - 1].lessons === 0) {
-      const after = shiftKey(cur.date, 1);
-      if (!startKey || keyToUTC(after) > keyToUTC(startKey)) {
-        startKey = after;
-        floor = 0;
-      }
-    }
-  }
-
-  if (!startKey) {
-    return { days: null, since: null, floor: 0, capped: false, estimated: true, nextTier: null };
+    if (keyToUTC(cur.date) < keyToUTC(startKey)) continue;
+    if (cur.lessons - days[i - 1].lessons === 0) emberDays++;
   }
 
   let count = daysBetweenKeys(startKey, today) + 1;
-  // The next tier being locked is proof the streak has not reached it yet.
+  // An unreached tier caps a guess, but never a start date we were handed.
   let capped = false;
-  if (nextTier && count >= nextTier.unlockAtVal) {
-    count = nextTier.unlockAtVal - 1;
+  if (!pinned && tier && count >= tier.at) {
+    count = tier.at - 1;
     capped = true;
   }
-  count = Math.max(count, floor);
+  count = Math.max(count, floor, 1);
 
   return {
     days: count,
     since: `${startKey}T00:00:00.000Z`,
     floor,
     capped,
-    estimated: true,
-    nextTier: nextTier
-      ? { title: nextTier.title, at: nextTier.unlockAtVal, thumb: nextTier.thumbnailURL }
-      : null,
+    estimated: !pinned,
+    pinned,
+    emberDays,
+    nextTier: tier,
   };
 }
 
@@ -529,6 +553,7 @@ export async function buildPayload({
   handle = 'the_baaneh',
   pathSlug = 'backend',
   tz = 'UTC',
+  streakSince = '',
   fresh = false,
 }) {
   if (!fresh && cache.payload && Date.now() - cache.payloadAt < USER_TTL) return cache.payload;
@@ -578,7 +603,7 @@ export async function buildPayload({
     { hoursDone, lessonsDone: stats.LessonsCompleted || 0, daysActive },
     today
   );
-  const streak = deriveStreak(achievements, days, today, tz);
+  const streak = deriveStreak(achievements, days, today, tz, streakSince);
 
   const payload = derive({
     pathData,

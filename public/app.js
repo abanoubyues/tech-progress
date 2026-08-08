@@ -624,12 +624,24 @@ function render(d) {
   if (s && s.days !== null) {
     $('streakTile').hidden = false;
     countUp($('streakDays'), s.days, (v) => Math.round(v));
-    $('streakSub').textContent = s.since ? `unbroken since ${shortDate(s.since)}` : 'tracking from today';
+    // Embers carry the streak through days with no lessons, so say so rather
+    // than let a quiet day read as if it were studied.
+    const embers = s.emberDays
+      ? `, ${s.emberDays} day${s.emberDays === 1 ? '' : 's'} on embers`
+      : '';
+    $('streakSub').textContent = s.since
+      ? `unbroken since ${shortDate(s.since)}${embers}`
+      : 'tracking from today';
     if (s.nextTier) {
       $('streakBar').style.width = `${Math.min(100, (s.days / s.nextTier.at) * 100)}%`;
       $('streakBadge').src = s.nextTier.thumb || '';
+      // A known streak is no longer capped by the locked tier, so it can pass
+      // the target while the achievement is still catching up.
       const gap = s.nextTier.at - s.days;
-      $('streakNext').textContent = `${gap} more day${gap === 1 ? '' : 's'} to ${s.nextTier.title}`;
+      $('streakNext').textContent =
+        gap > 0
+          ? `${gap} more day${gap === 1 ? '' : 's'} to ${s.nextTier.title}`
+          : `${s.nextTier.title} earned, waiting on boot.dev`;
       $('streakGoal').textContent = `${s.days} / ${s.nextTier.at}`;
     } else {
       $('streakBar').style.width = '100%';

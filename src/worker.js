@@ -33,6 +33,7 @@ const settings = (env) => ({
   handle: env.BOOTDEV_HANDLE || 'the_baaneh',
   pathSlug: env.BOOTDEV_PATH || 'backend',
   tz: env.BOOTDEV_TZ || 'UTC',
+  streakSince: env.BOOTDEV_STREAK_SINCE || '',
 });
 
 export default {

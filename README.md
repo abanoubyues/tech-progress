@@ -15,8 +15,8 @@ records totals even on days you never open the page.
 node server.js
 ```
 
-Then open <http://localhost:4173>. `PORT`, `BOOTDEV_HANDLE`, `BOOTDEV_PATH` and
-`BOOTDEV_TZ` all override the defaults.
+Then open <http://localhost:4173>. `PORT`, `BOOTDEV_HANDLE`, `BOOTDEV_PATH`,
+`BOOTDEV_TZ` and `BOOTDEV_STREAK_SINCE` all override the defaults.
 
 To run the deployed Worker instead, with a simulated KV store:
 
@@ -211,11 +211,21 @@ labelled `estimated` in the UI:
 - **Hours spent / left.** boot.dev doesn't track your real study time either.
   Hours come from each course's own `EstimatedCompletionTimeHours`: finished
   courses count in full, the current one pro-rated by lessons done.
-- **Current streak.** The live counter is behind login, but the streak
-  *achievements* are public and pin it down. "Study consistently for 8 days"
-  unlocking on Jul 31 means the streak began Jul 24; the next tier (Silver, 13
-  days) still being locked caps it below 13. Local daily history extends it
-  forward, and a recorded day with no lessons resets it.
+- **Current streak.** Both the live counter and the ember balance that protects
+  it are behind login, so set `BOOTDEV_STREAK_SINCE` to the day the streak began
+  (`YYYY-MM-DD`) and the dashboard counts forward from there on its own. Read it
+  off boot.dev once: today minus (streak - 1) days.
+
+  Left unset, it falls back to estimating from the public streak achievements:
+  "study consistently for 8 days" unlocking on Jul 31 implying a Jul 24 start,
+  with the next locked tier capping the guess. Treat that as rough: unlock times
+  arrive in **backfill batches** (several share a timestamp to the millisecond),
+  so the derived start can be a couple of days out either way.
+
+  **Embers** keep a streak alive through a day with no lessons, so a recorded
+  gap day no longer resets the count. Those days are tallied instead and shown
+  on the tile as "N days on embers". Nothing public reports embers running out,
+  so if a streak really does break, update `BOOTDEV_STREAK_SINCE`.
 
 ## Daily pace
 
