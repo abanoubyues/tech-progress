@@ -41,10 +41,12 @@ BOOTDEV_TZ = "Africa/Cairo"
 # The day the current streak began, YYYY-MM-DD. boot.dev keeps both the live
 # streak and the ember balance behind auth, so this is the only way the
 # dashboard can know the real number; it counts forward from here on its own.
-# This day counts as day 1, not day 0, so read it off the streak boot.dev shows:
-# today minus (streak - 1) days. A 16-day streak on Aug 9 began Jul 25.
+# This is the first day of the streak, counted as day 1. Note it is not simply
+# today minus the streak shown on boot.dev: days an ember covered keep the
+# streak alive without advancing the number, so the calendar span runs ahead of
+# it. Jul 24 with one ember day spent reads as 16 on Aug 9, not 17.
 # Clear it to fall back to estimating from the streak achievements.
-BOOTDEV_STREAK_SINCE = "2026-07-25"
+BOOTDEV_STREAK_SINCE = "2026-07-24"
 
 [observability]
 enabled = true

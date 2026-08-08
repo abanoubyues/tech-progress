@@ -337,7 +337,8 @@ function simulateEmbers(days, startKey, today) {
  *
  * Embers decide whether a gap day breaks the streak, and `simulateEmbers` walks
  * the recorded history to work out both the surviving start date and what is
- * left in the bank.
+ * left in the bank. A covered day keeps the streak alive but does not count
+ * towards it, so the number always trails the calendar span by the days spent.
  */
 function deriveStreak(achievements, days, today, tz, streakSince = '') {
   const streaks = (achievements || []).filter((a) => a.category === 'streak');
@@ -386,7 +387,9 @@ function deriveStreak(achievements, days, today, tz, streakSince = '') {
     floor = 0;
   }
 
-  let count = daysBetweenKeys(startKey, today) + 1;
+  // A day an ember covered keeps the streak alive but does not advance it, so
+  // the count is the calendar span since day one less the days spent on embers.
+  let count = daysBetweenKeys(startKey, today) + 1 - emberDays;
   // An unreached tier caps a guess, but never a start date we were handed.
   let capped = false;
   if (!pinned && tier && count >= tier.at) {

@@ -241,6 +241,11 @@ labelled `estimated` in the UI:
   it goes, and a quiet day only breaks the streak when the bank is already
   empty. The tile shows what is left and how far off the next one is.
 
+  A covered day keeps the streak **alive but does not advance it**, so the
+  number trails the calendar span by however many embers have been spent: Jul 24
+  to Aug 9 is 17 days, one of them on an ember, which boot.dev shows as 16. This
+  is why `BOOTDEV_STREAK_SINCE` is not just today minus the streak.
+
   Two honest limits. The bank is **seeded full** at the first recorded day,
   because history begins well after the streak did and what was banked by then
   is unknowable - the optimistic reading, which can only overstate how long a
