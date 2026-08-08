@@ -624,14 +624,26 @@ function render(d) {
   if (s && s.days !== null) {
     $('streakTile').hidden = false;
     countUp($('streakDays'), s.days, (v) => Math.round(v));
+    // A configured start date is known, not guessed: drop the "est." marker.
+    $('streakEst').hidden = !s.estimated;
     // Embers carry the streak through days with no lessons, so say so rather
     // than let a quiet day read as if it were studied.
-    const embers = s.emberDays
+    const spent = s.emberDays
       ? `, ${s.emberDays} day${s.emberDays === 1 ? '' : 's'} on embers`
       : '';
     $('streakSub').textContent = s.since
-      ? `unbroken since ${shortDate(s.since)}${embers}`
+      ? `unbroken since ${shortDate(s.since)}${spent}`
       : 'tracking from today';
+    // The bank is what decides whether the next quiet day costs the streak.
+    if (typeof s.nextEmberIn === 'number') {
+      const n = s.embers || 0;
+      const next = `next in ${s.nextEmberIn} lesson${s.nextEmberIn === 1 ? '' : 's'}`;
+      $('streakEmbers').textContent = n
+        ? `${n} ember${n === 1 ? '' : 's'} banked, ${next}`
+        : `no embers banked, ${next} - a quiet day now breaks the streak`;
+    } else {
+      $('streakEmbers').textContent = '';
+    }
     if (s.nextTier) {
       $('streakBar').style.width = `${Math.min(100, (s.days / s.nextTier.at) * 100)}%`;
       $('streakBadge').src = s.nextTier.thumb || '';
@@ -881,6 +893,24 @@ function scheduleNext(delay) {
   }, Math.max(0, delay));
 }
 
+/**
+ * Age alone cannot tell a cached payload it is obsolete: a deploy can change
+ * what the payload means minutes after it was stored, and reloading would keep
+ * redrawing the old copy for the rest of the hour. So ask the Worker which
+ * build is live. This costs a few bytes and never touches boot.dev, which keeps
+ * the promise that mattered - a reload is not a sync.
+ */
+async function isStaleBuild(build) {
+  if (!build) return true; // stored before builds were stamped
+  try {
+    const res = await fetch('/api/version', { cache: 'no-store' });
+    const live = (await res.json()).build;
+    return Boolean(live) && live !== build;
+  } catch {
+    return false; // offline: the cached copy is the best there is
+  }
+}
+
 const cached = readCache();
 const age = cached ? Date.now() - cached.fetchedAt : Infinity;
 // Escape hatch, since there is no refresh button: loading /?fresh=1 skips both
@@ -893,8 +923,12 @@ if (!forceFresh && age < REFRESH_MS) {
     // Reveal first: charts built inside a hidden container measure zero.
     reveal();
     render(last);
-    // Resume the existing cycle rather than starting a fresh hour.
-    scheduleNext(REFRESH_MS - age);
+    // Drawn from cache already, so this resolves behind an up-to-date screen.
+    isStaleBuild(cached.payload.build).then((stale) => {
+      // Resume the existing cycle unless the deploy reset it.
+      if (stale) load().then(() => scheduleNext(REFRESH_MS));
+      else scheduleNext(REFRESH_MS - age);
+    });
   } catch {
     // A cached payload from an incompatible build: fetch instead.
     load().then(() => scheduleNext(REFRESH_MS));

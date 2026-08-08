@@ -171,7 +171,7 @@
               <div>
                 <div class="kpi-label">
                   Current streak
-                  <span class="est" title="boot.dev keeps the live streak counter behind login. This is pinned by your streak achievements and extended by daily tracking.">est.</span>
+                  <span class="est" id="streakEst" title="boot.dev keeps the live streak counter behind login. This is estimated from your streak achievements, which is only ever approximate.">est.</span>
                 </div>
                 <div class="kpi-value streak-val">
                   <span class="flame" aria-hidden="true">🔥</span><span id="streakDays">0</span><span class="u">days</span>
@@ -185,6 +185,7 @@
               <span id="streakNext"></span>
               <span id="streakGoal"></span>
             </div>
+            <div class="kpi-change streak-embers" id="streakEmbers"></div>
           </section>
 
           <section class="card tile">

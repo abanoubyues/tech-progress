@@ -28,17 +28,30 @@ function kvStore(env) {
   };
 }
 
+// Cloudflare stamps each deploy with its own version id, so no build step is
+// needed to tell one release from the next. Absent the binding (local dev),
+// every response claims the same build and nothing invalidates.
+const buildId = (env) => (env.CF_VERSION_METADATA && env.CF_VERSION_METADATA.id) || 'dev';
+
 const settings = (env) => ({
   store: kvStore(env),
   handle: env.BOOTDEV_HANDLE || 'the_baaneh',
   pathSlug: env.BOOTDEV_PATH || 'backend',
   tz: env.BOOTDEV_TZ || 'UTC',
   streakSince: env.BOOTDEV_STREAK_SINCE || '',
+  build: buildId(env),
 });
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    // Deliberately tiny and upstream-free: a reload hits this to find out
+    // whether its cached payload predates the current deploy, and that check
+    // must not cost a boot.dev round trip.
+    if (url.pathname === '/api/version') {
+      return Response.json({ build: buildId(env) }, { headers: { 'Cache-Control': 'no-store' } });
+    }
 
     if (url.pathname === '/api/progress') {
       try {

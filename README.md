@@ -165,8 +165,20 @@ The page refetches **once an hour**, matching the Worker cron. That is the only
 trigger. Nothing refreshes on tab focus, there is no manual refresh control, and
 **reloading the page does not sync either**: the last payload is cached in
 `localStorage` with the time it was fetched, so a reload inside the hour renders
-from that copy and makes no request. The hourly cycle resumes where it left off
-rather than restarting.
+from that copy and fetches nothing from boot.dev. The hourly cycle resumes where
+it left off rather than restarting.
+
+One exception, because age alone cannot tell a cached copy it is **wrong**: a
+deploy can change what the payload means minutes after it was stored, and a
+reload would happily redraw the stale copy for the rest of the hour. So each
+payload carries the `build` that produced it, and a reload asks
+**`/api/version`** which build is live. On a mismatch it refetches and restarts
+the hour. That check is a few bytes off the Worker with no upstream call, so a
+reload still is not a sync.
+
+The build id comes from Cloudflare's `[version_metadata]` binding, which stamps
+every deploy - no build step, nothing to bump by hand. Locally it reads `dev`,
+so nothing invalidates during development.
 
 To force a sync, load **`/?fresh=1`**, which skips both the cached copy and the
 Worker's own cache.
@@ -222,10 +234,19 @@ labelled `estimated` in the UI:
   arrive in **backfill batches** (several share a timestamp to the millisecond),
   so the derived start can be a couple of days out either way.
 
-  **Embers** keep a streak alive through a day with no lessons, so a recorded
-  gap day no longer resets the count. Those days are tallied instead and shown
-  on the tile as "N days on embers". Nothing public reports embers running out,
-  so if a streak really does break, update `BOOTDEV_STREAK_SINCE`.
+- **Embers.** These are what keep a streak alive through a day with no lessons,
+  and the rules are simple enough to replay from the public lesson count: one
+  ember per **15 lessons** solved, **at most 2 banked**, one spent per quiet day.
+  So the dashboard walks its recorded history forward, banking and spending as
+  it goes, and a quiet day only breaks the streak when the bank is already
+  empty. The tile shows what is left and how far off the next one is.
+
+  Two honest limits. The bank is **seeded full** at the first recorded day,
+  because history begins well after the streak did and what was banked by then
+  is unknowable - the optimistic reading, which can only overstate how long a
+  gap survives. And a break is detected from *recorded* days, so a gap that
+  predates the history cannot be seen. If the two ever disagree with boot.dev,
+  `BOOTDEV_STREAK_SINCE` is the correction.
 
 ## Daily pace
 

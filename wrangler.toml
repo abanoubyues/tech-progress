@@ -12,6 +12,11 @@ compatibility_date = "2026-06-01"
 
 # Serves everything in public/ (index.html, styles.css, app.js, vendor/chart.umd.js).
 # run_worker_first keeps /api/progress on the Worker instead of 404ing on assets.
+# Each deploy gets its own version id, which /api/version hands to the page so a
+# reload can spot a payload cached before the current release. Avoids a build step.
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
 [assets]
 directory = "./public"
 binding = "ASSETS"
@@ -38,7 +43,7 @@ BOOTDEV_TZ = "Africa/Cairo"
 # dashboard can know the real number; it counts forward from here on its own.
 # Set it from the streak shown on boot.dev: today minus (streak - 1) days.
 # Clear it to fall back to estimating from the streak achievements.
-BOOTDEV_STREAK_SINCE = "2026-07-25"
+BOOTDEV_STREAK_SINCE = "2026-07-24"
 
 [observability]
 enabled = true

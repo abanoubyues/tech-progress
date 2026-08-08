@@ -16,6 +16,12 @@ const UA =
 export const USER_TTL = 60 * 1000;
 export const PATH_TTL = 6 * 60 * 60 * 1000;
 
+// Embers protect a streak through a day with nothing solved: boot.dev grants
+// one per 15 lessons and lets you bank at most 2, so a gap day is survivable
+// only while the bank holds. Past the cap, further lessons bank nothing.
+const LESSONS_PER_EMBER = 15;
+const MAX_EMBERS = 2;
+
 // How many days of history the rolling pace looks back over.
 const PACE_WINDOW_DAYS = 7;
 // A single noisy day is not a pace. Below this many recorded days, the lifetime
@@ -267,6 +273,57 @@ function computePace(days, { hoursDone, lessonsDone, daysActive }, today) {
 /* ------------------------------------------------------------------- streak */
 
 /**
+ * Replay the ember economy over the recorded days: bank one ember per 15
+ * lessons solved (never more than MAX_EMBERS held), and spend one on any day
+ * that gained nothing. A gap day with an empty bank is a real break, so the
+ * streak restarts the day after and the bank starts over from empty.
+ *
+ * Today is skipped: the day is still open, and nothing solved *yet* is not a
+ * gap. The first recorded day is skipped too, since with no day before it there
+ * is no delta to judge it by.
+ *
+ * The bank is seeded full because history begins mid-stream, well after the
+ * streak did, so what was already banked by then is unknowable. That is the
+ * optimistic reading; it can only overstate how long a gap the streak survives.
+ */
+function simulateEmbers(days, startKey, today) {
+  let banked = MAX_EMBERS;
+  let emberDays = 0;
+  let restartKey = null;
+
+  for (let i = 1; i < days.length; i++) {
+    const cur = days[i];
+    const prev = days[i - 1];
+    if (cur.date === today) continue;
+    if (keyToUTC(cur.date) < keyToUTC(startKey)) continue;
+
+    const gained = cur.lessons - prev.lessons;
+    if (gained > 0) {
+      const earned =
+        Math.floor(cur.lessons / LESSONS_PER_EMBER) -
+        Math.floor(prev.lessons / LESSONS_PER_EMBER);
+      banked = Math.min(MAX_EMBERS, banked + earned);
+    } else if (banked > 0) {
+      banked -= 1;
+      emberDays += 1;
+    } else {
+      // Nothing left to spend: the streak died here and begins again tomorrow.
+      restartKey = shiftKey(cur.date, 1);
+      emberDays = 0;
+      banked = 0;
+    }
+  }
+
+  const solved = days.length ? days[days.length - 1].lessons : 0;
+  return {
+    banked,
+    emberDays,
+    restartKey,
+    nextEmberIn: LESSONS_PER_EMBER - (solved % LESSONS_PER_EMBER),
+  };
+}
+
+/**
  * The live streak counter and the ember balance that protects it are both
  * behind auth: every public boot.dev endpoint exposes lifetime totals only.
  * So the streak start is either told to us (`streakSince`) or estimated from
@@ -278,9 +335,9 @@ function computePace(days, { hoursDone, lessonsDone, daysActive }, today) {
  * derived start can sit a couple of days off either way. A start date supplied
  * by config is therefore trusted over it, and over the locked-tier cap.
  *
- * Embers keep a streak alive through a day with no lessons, so a recorded gap
- * day no longer restarts the count. Those days are tallied as `emberDays` and
- * reported rather than silently absorbed.
+ * Embers decide whether a gap day breaks the streak, and `simulateEmbers` walks
+ * the recorded history to work out both the surviving start date and what is
+ * left in the bank.
  */
 function deriveStreak(achievements, days, today, tz, streakSince = '') {
   const streaks = (achievements || []).filter((a) => a.category === 'streak');
@@ -313,17 +370,20 @@ function deriveStreak(achievements, days, today, tz, streakSince = '') {
       estimated: true,
       pinned: false,
       emberDays: 0,
+      embers: MAX_EMBERS,
+      nextEmberIn: LESSONS_PER_EMBER,
+      broke: false,
       nextTier: tier,
     };
   }
 
-  // Recorded days inside the streak that gained nothing: embers carried these.
-  let emberDays = 0;
-  for (let i = 1; i < days.length; i++) {
-    const cur = days[i];
-    if (cur.date === today) continue;
-    if (keyToUTC(cur.date) < keyToUTC(startKey)) continue;
-    if (cur.lessons - days[i - 1].lessons === 0) emberDays++;
+  const { banked, emberDays, restartKey, nextEmberIn } = simulateEmbers(days, startKey, today);
+  // Running the bank dry outranks the configured start date: that date says
+  // when the streak began, not that it is still alive.
+  const broke = Boolean(restartKey) && keyToUTC(restartKey) > keyToUTC(startKey);
+  if (broke) {
+    startKey = restartKey;
+    floor = 0;
   }
 
   let count = daysBetweenKeys(startKey, today) + 1;
@@ -340,9 +400,13 @@ function deriveStreak(achievements, days, today, tz, streakSince = '') {
     since: `${startKey}T00:00:00.000Z`,
     floor,
     capped,
-    estimated: !pinned,
+    // A break makes the count ours again, not the one we were handed.
+    estimated: !pinned || broke,
     pinned,
+    broke,
     emberDays,
+    embers: banked,
+    nextEmberIn,
     nextTier: tier,
   };
 }
@@ -355,7 +419,7 @@ function deriveStreak(achievements, days, today, tz, streakSince = '') {
  * the leftover lessons are walked forward through the remaining courses in path
  * order. Everything derived this way is flagged `estimated` for the UI.
  */
-function derive({ pathData, user, stats, achievements, completedMap, days, pace, streak, handle }) {
+function derive({ build, pathData, user, stats, achievements, completedMap, days, pace, streak, handle }) {
   const courses = pathData.courses;
   const totalLessons = courses.reduce((a, c) => a + c.lessons, 0);
   const totalHours = courses.reduce((a, c) => a + c.hours, 0);
@@ -429,6 +493,7 @@ function derive({ pathData, user, stats, achievements, completedMap, days, pace,
     .slice(0, 4);
 
   return {
+    build,
     updatedAt: new Date().toISOString(),
     stale: !!pathData.stale,
     user: {
@@ -554,6 +619,7 @@ export async function buildPayload({
   pathSlug = 'backend',
   tz = 'UTC',
   streakSince = '',
+  build = 'dev',
   fresh = false,
 }) {
   if (!fresh && cache.payload && Date.now() - cache.payloadAt < USER_TTL) return cache.payload;
@@ -605,7 +671,9 @@ export async function buildPayload({
   );
   const streak = deriveStreak(achievements, days, today, tz, streakSince);
 
+  // Stamped so a client holding a pre-deploy copy can tell it is obsolete.
   const payload = derive({
+    build,
     pathData,
     user,
     stats,
