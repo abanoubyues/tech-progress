@@ -16,11 +16,12 @@ const UA =
 export const USER_TTL = 60 * 1000;
 export const PATH_TTL = 6 * 60 * 60 * 1000;
 
-// Embers protect a streak through a day with nothing solved: boot.dev grants
-// one per 15 lessons and lets you bank at most 2, so a gap day is survivable
-// only while the bank holds. Past the cap, further lessons bank nothing.
+// What keeps a streak alive through a day with nothing solved. Embers come one
+// per 15 lessons, at most 2 banked, and are always spent first. Frozen flames
+// take over once the bank is empty, each covering a four-day block.
 const LESSONS_PER_EMBER = 15;
 const MAX_EMBERS = 2;
+const FLAME_COVERS_DAYS = 4;
 
 // How many days of history the rolling pace looks back over.
 const PACE_WINDOW_DAYS = 7;
@@ -273,23 +274,32 @@ function computePace(days, { hoursDone, lessonsDone, daysActive }, today) {
 /* ------------------------------------------------------------------- streak */
 
 /**
- * Replay the ember economy over the recorded days: bank one ember per 15
- * lessons solved (never more than MAX_EMBERS held), and spend one on any day
- * that gained nothing. A gap day with an empty bank is a real break, so the
- * streak restarts the day after and the bank starts over from empty.
+ * Replay what carried the streak over the recorded days. Embers bank one per 15
+ * lessons solved (never more than MAX_EMBERS held) and are always spent first.
+ * With the bank empty a frozen flame catches the day and covers a block of
+ * FLAME_COVERS_DAYS from there; an unburnt remainder is not carried, so a later
+ * quiet day starts a fresh flame.
  *
  * Today is skipped: the day is still open, and nothing solved *yet* is not a
- * gap. The first recorded day is skipped too, since with no day before it there
- * is no delta to judge it by.
+ * quiet day. The first recorded day is skipped too, since with no day before it
+ * there is no delta to judge it by.
  *
- * The bank is seeded full because history begins mid-stream, well after the
- * streak did, so what was already banked by then is unknowable. That is the
- * optimistic reading; it can only overstate how long a gap the streak survives.
+ * Two things are unknowable from outside. The ember bank is seeded full, since
+ * history begins well after the streak did. And flames are assumed available on
+ * demand: the count is auth-gated, they arrive at random, and nothing caps them.
+ * That second assumption is why nothing here declares a streak dead - with
+ * unbounded cover that cannot be read, a break is not provable from the public
+ * side. `BOOTDEV_STREAK_SINCE` is the correction if one ever happens.
+ *
+ * Only the ember/flame split rests on those guesses. The streak count does not:
+ * a covered day fails to advance it whichever resource paid for it.
  */
-function simulateEmbers(days, startKey, today) {
+function simulateProtection(days, startKey, today) {
   let banked = MAX_EMBERS;
   let emberDays = 0;
-  let restartKey = null;
+  let flameDays = 0;
+  let flamesUsed = 0;
+  let flameUntil = null;
 
   for (let i = 1; i < days.length; i++) {
     const cur = days[i];
@@ -303,14 +313,18 @@ function simulateEmbers(days, startKey, today) {
         Math.floor(cur.lessons / LESSONS_PER_EMBER) -
         Math.floor(prev.lessons / LESSONS_PER_EMBER);
       banked = Math.min(MAX_EMBERS, banked + earned);
+      continue;
+    }
+
+    if (flameUntil && keyToUTC(cur.date) <= keyToUTC(flameUntil)) {
+      flameDays += 1; // still inside a flame already burning
     } else if (banked > 0) {
       banked -= 1;
       emberDays += 1;
     } else {
-      // Nothing left to spend: the streak died here and begins again tomorrow.
-      restartKey = shiftKey(cur.date, 1);
-      emberDays = 0;
-      banked = 0;
+      flamesUsed += 1;
+      flameUntil = shiftKey(cur.date, FLAME_COVERS_DAYS - 1);
+      flameDays += 1;
     }
   }
 
@@ -318,7 +332,8 @@ function simulateEmbers(days, startKey, today) {
   return {
     banked,
     emberDays,
-    restartKey,
+    flameDays,
+    flamesUsed,
     nextEmberIn: LESSONS_PER_EMBER - (solved % LESSONS_PER_EMBER),
   };
 }
@@ -335,10 +350,9 @@ function simulateEmbers(days, startKey, today) {
  * derived start can sit a couple of days off either way. A start date supplied
  * by config is therefore trusted over it, and over the locked-tier cap.
  *
- * Embers decide whether a gap day breaks the streak, and `simulateEmbers` walks
- * the recorded history to work out both the surviving start date and what is
- * left in the bank. A covered day keeps the streak alive but does not count
- * towards it, so the number always trails the calendar span by the days spent.
+ * `simulateProtection` walks the recorded history for what carried the quiet
+ * days. A covered day keeps the streak alive but does not count towards it, so
+ * the number always trails the calendar span by the days that were carried.
  */
 function deriveStreak(achievements, days, today, tz, streakSince = '') {
   const streaks = (achievements || []).filter((a) => a.category === 'streak');
@@ -371,25 +385,23 @@ function deriveStreak(achievements, days, today, tz, streakSince = '') {
       estimated: true,
       pinned: false,
       emberDays: 0,
+      flameDays: 0,
+      flamesUsed: 0,
       embers: MAX_EMBERS,
       nextEmberIn: LESSONS_PER_EMBER,
-      broke: false,
       nextTier: tier,
     };
   }
 
-  const { banked, emberDays, restartKey, nextEmberIn } = simulateEmbers(days, startKey, today);
-  // Running the bank dry outranks the configured start date: that date says
-  // when the streak began, not that it is still alive.
-  const broke = Boolean(restartKey) && keyToUTC(restartKey) > keyToUTC(startKey);
-  if (broke) {
-    startKey = restartKey;
-    floor = 0;
-  }
+  const { banked, emberDays, flameDays, flamesUsed, nextEmberIn } = simulateProtection(
+    days,
+    startKey,
+    today
+  );
 
-  // A day an ember covered keeps the streak alive but does not advance it, so
-  // the count is the calendar span since day one less the days spent on embers.
-  let count = daysBetweenKeys(startKey, today) + 1 - emberDays;
+  // A protected day keeps the streak alive without advancing it, so the count
+  // is the calendar span since day one less every day that was carried.
+  let count = daysBetweenKeys(startKey, today) + 1 - emberDays - flameDays;
   // An unreached tier caps a guess, but never a start date we were handed.
   let capped = false;
   if (!pinned && tier && count >= tier.at) {
@@ -403,11 +415,11 @@ function deriveStreak(achievements, days, today, tz, streakSince = '') {
     since: `${startKey}T00:00:00.000Z`,
     floor,
     capped,
-    // A break makes the count ours again, not the one we were handed.
-    estimated: !pinned || broke,
+    estimated: !pinned,
     pinned,
-    broke,
     emberDays,
+    flameDays,
+    flamesUsed,
     embers: banked,
     nextEmberIn,
     nextTier: tier,

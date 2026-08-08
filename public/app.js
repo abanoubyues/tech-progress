@@ -626,21 +626,22 @@ function render(d) {
     countUp($('streakDays'), s.days, (v) => Math.round(v));
     // A configured start date is known, not guessed: drop the "est." marker.
     $('streakEst').hidden = !s.estimated;
-    // Embers carry the streak through days with no lessons, so say so rather
-    // than let a quiet day read as if it were studied.
-    const spent = s.emberDays
-      ? `, ${s.emberDays} day${s.emberDays === 1 ? '' : 's'} on embers`
-      : '';
+    // Carried days keep the streak alive without counting towards it, so the
+    // gap between the number and the calendar has to be visible somewhere.
+    const day = (n) => `${n} day${n === 1 ? '' : 's'}`;
+    const carried = [];
+    if (s.emberDays) carried.push(`${day(s.emberDays)} on embers`);
+    if (s.flameDays) carried.push(`${day(s.flameDays)} on frozen flames`);
     $('streakSub').textContent = s.since
-      ? `unbroken since ${shortDate(s.since)}${spent}`
+      ? `unbroken since ${shortDate(s.since)}${carried.length ? `, ${carried.join(' and ')}` : ''}`
       : 'tracking from today';
-    // The bank is what decides whether the next quiet day costs the streak.
+    // The bank decides whether the next quiet day costs an ember or a flame.
     if (typeof s.nextEmberIn === 'number') {
       const n = s.embers || 0;
       const next = `next in ${s.nextEmberIn} lesson${s.nextEmberIn === 1 ? '' : 's'}`;
       $('streakEmbers').textContent = n
         ? `${n} ember${n === 1 ? '' : 's'} banked, ${next}`
-        : `no embers banked, ${next} - a quiet day now breaks the streak`;
+        : `no embers banked, ${next} - a quiet day now falls to a frozen flame`;
     } else {
       $('streakEmbers').textContent = '';
     }

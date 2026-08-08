@@ -246,12 +246,23 @@ labelled `estimated` in the UI:
   to Aug 9 is 17 days, one of them on an ember, which boot.dev shows as 16. This
   is why `BOOTDEV_STREAK_SINCE` is not just today minus the streak.
 
-  Two honest limits. The bank is **seeded full** at the first recorded day,
-  because history begins well after the streak did and what was banked by then
-  is unknowable - the optimistic reading, which can only overstate how long a
-  gap survives. And a break is detected from *recorded* days, so a gap that
-  predates the history cannot be seen. If the two ever disagree with boot.dev,
+- **Frozen flames** take over once the ember bank is empty - embers are always
+  spent first. One flame covers a **four-day block** from the day it catches,
+  and an unburnt remainder is not carried, so a later quiet day starts a fresh
+  flame. Flame days do not count towards the streak either.
+
+  They arrive at random with no cap, and the count is auth-gated, so the
+  dashboard assumes one is available whenever the bank runs dry. **That is why
+  nothing here ever declares a streak dead**: with unbounded cover that cannot
+  be read, a break is not provable from the public side. If one really happens,
   `BOOTDEV_STREAK_SINCE` is the correction.
+
+  The ember bank is also **seeded full** at the first recorded day, since
+  history begins well after the streak did.
+
+  Only the ember/flame split rests on those assumptions. The streak count does
+  not: a covered day fails to advance it whichever resource paid for it, so it
+  is simply the calendar span less every quiet day.
 
 ## Daily pace
 
