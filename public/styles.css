@@ -335,9 +335,6 @@ body {
 .streak-val .flame { font-size: 24px; line-height: 1; }
 .streak-badge { width: 48px; height: 48px; flex: none; opacity: .9; }
 .streak-bar { margin-top: 14px; }
-/* Ember bank sits under the tier bar, quieter than the streak figure itself. */
-.streak-embers { margin-top: 10px; }
-.streak-embers:empty { display: none; }
 .streak-bar .bar-fill { background: var(--warning); }
 
 .pace-row { display: flex; gap: 20px; margin: 16px 0 0; flex-wrap: wrap; }
