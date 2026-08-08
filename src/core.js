@@ -304,7 +304,6 @@ function simulateProtection(days, startKey, today) {
   for (let i = 1; i < days.length; i++) {
     const cur = days[i];
     const prev = days[i - 1];
-    if (cur.date === today) continue;
     if (keyToUTC(cur.date) < keyToUTC(startKey)) continue;
 
     const gained = cur.lessons - prev.lessons;
@@ -315,6 +314,10 @@ function simulateProtection(days, startKey, today) {
       banked = Math.min(MAX_EMBERS, banked + earned);
       continue;
     }
+
+    // Lessons solved today still bank embers, but a day that is merely unfinished
+    // is not a quiet one, so only past days can spend anything.
+    if (cur.date === today) continue;
 
     if (flameUntil && keyToUTC(cur.date) <= keyToUTC(flameUntil)) {
       flameDays += 1; // still inside a flame already burning
@@ -334,6 +337,7 @@ function simulateProtection(days, startKey, today) {
     emberDays,
     flameDays,
     flamesUsed,
+    emberCap: MAX_EMBERS,
     nextEmberIn: LESSONS_PER_EMBER - (solved % LESSONS_PER_EMBER),
   };
 }
@@ -388,12 +392,13 @@ function deriveStreak(achievements, days, today, tz, streakSince = '') {
       flameDays: 0,
       flamesUsed: 0,
       embers: MAX_EMBERS,
+      emberCap: MAX_EMBERS,
       nextEmberIn: LESSONS_PER_EMBER,
       nextTier: tier,
     };
   }
 
-  const { banked, emberDays, flameDays, flamesUsed, nextEmberIn } = simulateProtection(
+  const { banked, emberDays, flameDays, flamesUsed, emberCap, nextEmberIn } = simulateProtection(
     days,
     startKey,
     today
@@ -421,6 +426,7 @@ function deriveStreak(achievements, days, today, tz, streakSince = '') {
     flameDays,
     flamesUsed,
     embers: banked,
+    emberCap,
     nextEmberIn,
     nextTier: tier,
   };

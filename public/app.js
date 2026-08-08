@@ -638,7 +638,11 @@ function render(d) {
     // The bank decides whether the next quiet day costs an ember or a flame.
     if (typeof s.nextEmberIn === 'number') {
       const n = s.embers || 0;
-      const next = `next in ${s.nextEmberIn} lesson${s.nextEmberIn === 1 ? '' : 's'}`;
+      // At the cap, lessons bank nothing, so counting down to the next one lies.
+      const next =
+        n >= (s.emberCap || Infinity)
+          ? 'bank full'
+          : `next in ${s.nextEmberIn} lesson${s.nextEmberIn === 1 ? '' : 's'}`;
       $('streakEmbers').textContent = n
         ? `${n} ember${n === 1 ? '' : 's'} banked, ${next}`
         : `no embers banked, ${next} - a quiet day now falls to a frozen flame`;
