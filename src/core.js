@@ -280,6 +280,9 @@ function computePace(days, { hoursDone, lessonsDone, daysActive }, today) {
  * FLAME_COVERS_DAYS from there; an unburnt remainder is not carried, so a later
  * quiet day starts a fresh flame.
  *
+ * A day counts as quiet only when it gained neither lessons nor XP, since XP
+ * catches the activity that never touches the path.
+ *
  * Today is skipped: the day is still open, and nothing solved *yet* is not a
  * quiet day. The first recorded day is skipped too, since with no day before it
  * there is no delta to judge it by.
@@ -306,14 +309,21 @@ function simulateProtection(days, startKey, today) {
     const prev = days[i - 1];
     if (keyToUTC(cur.date) < keyToUTC(startKey)) continue;
 
-    const gained = cur.lessons - prev.lessons;
-    if (gained > 0) {
+    const gainedLessons = cur.lessons - prev.lessons;
+    const gainedXP = (cur.xp || 0) - (prev.xp || 0);
+
+    if (gainedLessons > 0) {
       const earned =
         Math.floor(cur.lessons / LESSONS_PER_EMBER) -
         Math.floor(prev.lessons / LESSONS_PER_EMBER);
       banked = Math.min(MAX_EMBERS, banked + earned);
-      continue;
     }
+
+    // boot.dev counts days with *activity*, not days with path lessons solved.
+    // Boss fights and training grounds earn XP without touching the path, so XP
+    // is the wider signal: any at all means the day stood on its own and cost
+    // nothing to keep.
+    if (gainedLessons > 0 || gainedXP > 0) continue;
 
     // Lessons solved today still bank embers, but a day that is merely unfinished
     // is not a quiet one, so only past days can spend anything.

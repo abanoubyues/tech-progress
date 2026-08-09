@@ -159,7 +159,12 @@ function buildCharts(d) {
   $('chartDaily').style.display = days.length ? '' : 'none';
   $('chartCumulative').style.display = hasTrend ? '' : 'none';
 
-  /* Lessons per day: single series, so no legend. Peak is labeled via tooltip. */
+  /* Lessons and XP per day. XP runs in the thousands against single-digit
+     lesson counts, so it takes its own right-hand axis and is drawn as a line:
+     grouped bars on one scale would flatten the lessons into the baseline. The
+     two series answer different questions - lessons are path progress, XP is
+     activity of any kind, including boss fights and training that never touch
+     the path - so a legend is needed here where the other charts do without. */
   $('emptyDaily').hidden = days.length > 0;
   if (days.length) {
     charts.daily = new Chart(freshCanvas('chartDaily'), {
@@ -168,18 +173,66 @@ function buildCharts(d) {
         labels: days.map((x) => shortDate(x.date)),
         datasets: [
           {
+            label: 'Lessons',
             data: days.map((x) => x.lessons),
             backgroundColor: t.s1,
             borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
             borderSkipped: false,
             maxBarThickness: 46,
+            yAxisID: 'y',
+            order: 2,
+          },
+          {
+            type: 'line',
+            label: 'XP',
+            data: days.map((x) => x.xp || 0),
+            borderColor: t.s2,
+            backgroundColor: t.s2,
+            borderWidth: 2,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+            tension: 0.3,
+            yAxisID: 'y1',
+            order: 1, // above the bars
           },
         ],
       },
       options: {
         ...baseOptions(t),
+        scales: {
+          ...baseOptions(t).scales,
+          y: {
+            ...baseOptions(t).scales.y,
+            title: { display: true, text: 'lessons', color: t.muted, font: { size: 10 } },
+          },
+          y1: {
+            position: 'right',
+            beginAtZero: true,
+            // One grid is enough; a second set behind it just adds noise.
+            grid: { drawOnChartArea: false },
+            border: { display: false },
+            ticks: {
+              color: t.muted,
+              callback: (v) => (v >= 1000 ? `${Math.round(v / 100) / 10}k` : v),
+            },
+            title: { display: true, text: 'XP', color: t.muted, font: { size: 10 } },
+          },
+        },
         plugins: {
           ...baseOptions(t).plugins,
+          legend: {
+            display: true,
+            position: 'top',
+            align: 'end',
+            labels: {
+              color: t.ink2,
+              usePointStyle: true,
+              pointStyle: 'circle',
+              boxWidth: 8,
+              boxHeight: 8,
+              padding: 14,
+            },
+          },
           tooltip: {
             ...baseOptions(t).plugins.tooltip,
             callbacks: {
@@ -192,12 +245,15 @@ function buildCharts(d) {
                 });
               },
               label: (c) => {
+                // Both series share one tooltip block, written once from the
+                // bars; the XP line would otherwise repeat every line of it.
+                if (c.datasetIndex !== 0) return [];
                 const row = days[c.dataIndex];
                 const lines = [
                   `${row.lessons} lesson${row.lessons === 1 ? '' : 's'} solved`,
                   `${row.hours.toFixed(1)} hours of course time`,
                 ];
-                if (row.xp) lines.push(`${fmt(row.xp)} XP earned`);
+                lines.push(row.xp ? `${fmt(row.xp)} XP earned` : 'no XP earned');
                 const avg = d.time.pace.lessonsPerDay;
                 if (avg > 0) {
                   const diff = row.lessons - avg;
@@ -626,29 +682,12 @@ function render(d) {
     countUp($('streakDays'), s.days, (v) => Math.round(v));
     // A configured start date is known, not guessed: drop the "est." marker.
     $('streakEst').hidden = !s.estimated;
-    // Carried days keep the streak alive without counting towards it, so the
-    // gap between the number and the calendar has to be visible somewhere.
-    const day = (n) => `${n} day${n === 1 ? '' : 's'}`;
-    const carried = [];
-    if (s.emberDays) carried.push(`${day(s.emberDays)} on embers`);
-    if (s.flameDays) carried.push(`${day(s.flameDays)} on frozen flames`);
+    // What carried a quiet day is not shown: the bank is simulated from public
+    // totals and boot.dev disagrees with it. The start date is derivable, so
+    // that is all the tile claims.
     $('streakSub').textContent = s.since
-      ? `unbroken since ${shortDate(s.since)}${carried.length ? `, ${carried.join(' and ')}` : ''}`
+      ? `unbroken since ${shortDate(s.since)}`
       : 'tracking from today';
-    // The bank decides whether the next quiet day costs an ember or a flame.
-    if (typeof s.nextEmberIn === 'number') {
-      const n = s.embers || 0;
-      // At the cap, lessons bank nothing, so counting down to the next one lies.
-      const next =
-        n >= (s.emberCap || Infinity)
-          ? 'bank full'
-          : `next in ${s.nextEmberIn} lesson${s.nextEmberIn === 1 ? '' : 's'}`;
-      $('streakEmbers').textContent = n
-        ? `${n} ember${n === 1 ? '' : 's'} banked, ${next}`
-        : `no embers banked, ${next} - a quiet day now falls to a frozen flame`;
-    } else {
-      $('streakEmbers').textContent = '';
-    }
     if (s.nextTier) {
       $('streakBar').style.width = `${Math.min(100, (s.days / s.nextTier.at) * 100)}%`;
       $('streakBadge').src = s.nextTier.thumb || '';
