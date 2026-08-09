@@ -223,11 +223,8 @@ labelled `estimated` in the UI:
 - **Hours spent / left.** boot.dev doesn't track your real study time either.
   Hours come from each course's own `EstimatedCompletionTimeHours`: finished
   courses count in full, the current one pro-rated by lessons done.
-- **Current streak.** Set `BOOTDEV_COOKIE` and this stops being an estimate at
-  all - see [The real streak](#the-real-streak) below. Everything that follows
-  applies only when that is unset or the cookie has lapsed.
-
-  The live counter is behind login, so set `BOOTDEV_STREAK_SINCE` to the day the streak began
+- **Current streak.** Both the live counter and the ember balance that protects
+  it are behind login, so set `BOOTDEV_STREAK_SINCE` to the day the streak began
   (`YYYY-MM-DD`) and the dashboard counts forward from there on its own. Read it
   off boot.dev once: today minus (streak - 1) days.
 
@@ -266,38 +263,6 @@ labelled `estimated` in the UI:
   Only the ember/flame split rests on those assumptions. The streak count does
   not: a covered day fails to advance it whichever resource paid for it, so it
   is simply the calendar span less every quiet day.
-
-## The real streak
-
-boot.dev counts **"days with activity"**, not days with lessons solved. Nothing
-public distinguishes the two, so a derived streak can only ever approximate it.
-The real number is server-rendered into `boot.dev/dashboard` behind the session
-cookie - there is no authed API to call, just the same Nuxt payload parsing this
-already does for the public pages.
-
-Set the cookie and the dashboard reads the true value:
-
-```bash
-npx wrangler secret put BOOTDEV_COOKIE
-```
-
-Paste the full `cookie:` request header from a signed-in request (DevTools >
-Network > any `boot.dev` document request > Request Headers). The auth cookie is
-`HttpOnly`, so it cannot be read from the page's JavaScript - DevTools is the
-only place to get it.
-
-**It has to be a secret, never a `[vars]` entry.** `wrangler.toml` is committed
-to a public repo; a session cookie in it is account access for anyone reading.
-
-The read is best effort. An expired cookie, a redirect to login or changed
-markup all log a warning and fall back to the derived streak, so the dashboard
-degrades to an approximation rather than breaking. When it is live the tile says
-so and drops the `est.` marker; `streak.source` in the payload is `live`,
-`pinned` or `estimated`.
-
-Note that a cookie copied out of a browser stays valid until boot.dev expires it
-server-side. Clearing cookies in the browser only discards that copy - it does
-not revoke this one. Signing out is what invalidates it for good.
 
 ## Daily pace
 

@@ -20,7 +20,6 @@ const HANDLE = process.env.BOOTDEV_HANDLE || 'the_baaneh';
 const PATH_SLUG = process.env.BOOTDEV_PATH || 'backend';
 const TZ = process.env.BOOTDEV_TZ || 'UTC';
 const STREAK_SINCE = process.env.BOOTDEV_STREAK_SINCE || '';
-const COOKIE = process.env.BOOTDEV_COOKIE || '';
 const PORT = Number(process.env.PORT) || 4173;
 
 const HISTORY = path.join(__dirname, 'history.json');
@@ -67,7 +66,6 @@ const server = http.createServer(async (req, res) => {
         pathSlug: PATH_SLUG,
         tz: TZ,
         streakSince: STREAK_SINCE,
-        cookie: COOKIE,
         fresh: url.searchParams.get('fresh') === '1',
       });
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });

@@ -626,17 +626,28 @@ function render(d) {
     countUp($('streakDays'), s.days, (v) => Math.round(v));
     // A configured start date is known, not guessed: drop the "est." marker.
     $('streakEst').hidden = !s.estimated;
-    // Read live, the number needs no explaining. Derived, the start date is the
-    // only honest thing to show: what carried a quiet day is not knowable from
-    // public data, since boot.dev counts activity rather than lessons.
-    if (s.source === 'live') {
-      $('streakSub').textContent = s.expiresAt
-        ? `live from boot.dev, safe until ${shortDate(s.expiresAt)}`
-        : 'live from boot.dev';
+    // Carried days keep the streak alive without counting towards it, so the
+    // gap between the number and the calendar has to be visible somewhere.
+    const day = (n) => `${n} day${n === 1 ? '' : 's'}`;
+    const carried = [];
+    if (s.emberDays) carried.push(`${day(s.emberDays)} on embers`);
+    if (s.flameDays) carried.push(`${day(s.flameDays)} on frozen flames`);
+    $('streakSub').textContent = s.since
+      ? `unbroken since ${shortDate(s.since)}${carried.length ? `, ${carried.join(' and ')}` : ''}`
+      : 'tracking from today';
+    // The bank decides whether the next quiet day costs an ember or a flame.
+    if (typeof s.nextEmberIn === 'number') {
+      const n = s.embers || 0;
+      // At the cap, lessons bank nothing, so counting down to the next one lies.
+      const next =
+        n >= (s.emberCap || Infinity)
+          ? 'bank full'
+          : `next in ${s.nextEmberIn} lesson${s.nextEmberIn === 1 ? '' : 's'}`;
+      $('streakEmbers').textContent = n
+        ? `${n} ember${n === 1 ? '' : 's'} banked, ${next}`
+        : `no embers banked, ${next} - a quiet day now falls to a frozen flame`;
     } else {
-      $('streakSub').textContent = s.since
-        ? `unbroken since ${shortDate(s.since)}`
-        : 'tracking from today';
+      $('streakEmbers').textContent = '';
     }
     if (s.nextTier) {
       $('streakBar').style.width = `${Math.min(100, (s.days / s.nextTier.at) * 100)}%`;

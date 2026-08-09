@@ -39,8 +39,6 @@ const settings = (env) => ({
   pathSlug: env.BOOTDEV_PATH || 'backend',
   tz: env.BOOTDEV_TZ || 'UTC',
   streakSince: env.BOOTDEV_STREAK_SINCE || '',
-  // Secret, never a [vars] entry: the repo is public.
-  cookie: env.BOOTDEV_COOKIE || '',
   build: buildId(env),
 });
 

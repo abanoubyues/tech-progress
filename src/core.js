@@ -31,7 +31,6 @@ const MIN_PACE_DAYS = 3;
 
 const profileURL = (handle) => `https://www.boot.dev/u/${handle}`;
 const pathURL = (slug) => `https://www.boot.dev/paths/${slug}?tech=python-golang`;
-const DASHBOARD_URL = 'https://www.boot.dev/dashboard';
 
 // Per-isolate best-effort cache. Losing it just means one extra upstream fetch.
 const cache = { payload: null, payloadAt: 0, path: null, pathAt: 0 };
@@ -152,42 +151,6 @@ async function loadPath(slug) {
     cache.pathAt = Date.now();
     return snap;
   }
-}
-
-/**
- * The real streak, read from the signed-in dashboard.
- *
- * No public endpoint carries it and there is no authed API to call either: the
- * number is server-rendered into the dashboard page, so this is the same Nuxt
- * parsing used elsewhere, only with a session cookie attached. boot.dev counts
- * "days with activity", which is not the same as days with lessons solved, so
- * nothing derived from the public lesson count can reproduce it reliably.
- *
- * Throws on anything unexpected - lapsed cookie, redirect to login, changed
- * markup - and the caller falls back to deriving a streak instead.
- */
-async function fetchLiveStreak(cookie) {
-  const res = await fetch(DASHBOARD_URL, {
-    headers: { 'User-Agent': UA, Cookie: cookie, Accept: 'text/html' },
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText} for the dashboard`);
-  const { arr, resolve } = parseNuxtPayload(await res.text());
-
-  for (let i = 0; i < arr.length; i++) {
-    const v = arr[i];
-    if (!v || Array.isArray(v) || typeof v !== 'object') continue;
-    if (!('currentProgress' in v) || !('progressTypeDescriptionText' in v)) continue;
-    const s = resolve(i);
-    if (!s || typeof s.currentProgress !== 'number') continue;
-    const engagement = s.achievementData && s.achievementData.engagementStreakData;
-    return {
-      days: s.currentProgress,
-      target: typeof s.maxProgress === 'number' ? s.maxProgress : null,
-      expiresAt: (engagement && engagement.expiresAt) || null,
-    };
-  }
-  // Signed out, the dashboard renders a login page with no streak in it.
-  throw new Error('no streak in the dashboard payload (cookie lapsed?)');
 }
 
 /* -------------------------------------------------------------------- dates */
@@ -677,26 +640,17 @@ export async function buildPayload({
   pathSlug = 'backend',
   tz = 'UTC',
   streakSince = '',
-  cookie = '',
   build = 'dev',
   fresh = false,
 }) {
   if (!fresh && cache.payload && Date.now() - cache.payloadAt < USER_TTL) return cache.payload;
 
-  const [user, stats, achievements, profileHTML, pathData, live] = await Promise.all([
+  const [user, stats, achievements, profileHTML, pathData] = await Promise.all([
     getJSON(`${API}/users/public/${handle}`),
     getJSON(`${API}/users/public/${handle}/stats`),
     getJSON(`${API}/users/public/${handle}/achievements`).catch(() => []),
     getHTML(profileURL(handle)),
     loadPath(pathSlug),
-    // Best effort by design: an expired cookie must degrade to the derived
-    // streak, never take the whole dashboard down with it.
-    cookie
-      ? fetchLiveStreak(cookie).catch((err) => {
-          console.warn('[streak] live read failed, deriving instead:', err.message);
-          return null;
-        })
-      : Promise.resolve(null),
   ]);
 
   let completedMap = new Map();
@@ -736,23 +690,7 @@ export async function buildPayload({
     { hoursDone, lessonsDone: stats.LessonsCompleted || 0, daysActive },
     today
   );
-  // The derived streak stays the floor under a live read, so a lapsed cookie
-  // degrades to an approximation rather than to nothing at all.
-  const derived = deriveStreak(achievements, days, today, tz, streakSince);
-  const streak = live
-    ? {
-        ...derived,
-        days: live.days,
-        // Read from the source, so none of the derivation's caveats apply.
-        estimated: false,
-        source: 'live',
-        expiresAt: live.expiresAt,
-        nextTier:
-          derived.nextTier && live.target
-            ? { ...derived.nextTier, at: live.target }
-            : derived.nextTier,
-      }
-    : { ...derived, source: derived.pinned ? 'pinned' : 'estimated', expiresAt: null };
+  const streak = deriveStreak(achievements, days, today, tz, streakSince);
 
   // Stamped so a client holding a pre-deploy copy can tell it is obsolete.
   const payload = derive({
