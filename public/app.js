@@ -159,12 +159,10 @@ function buildCharts(d) {
   $('chartDaily').style.display = days.length ? '' : 'none';
   $('chartCumulative').style.display = hasTrend ? '' : 'none';
 
-  /* Lessons and XP per day. XP runs in the thousands against single-digit
-     lesson counts, so it takes its own right-hand axis and is drawn as a line:
-     grouped bars on one scale would flatten the lessons into the baseline. The
-     two series answer different questions - lessons are path progress, XP is
-     activity of any kind, including boss fights and training that never touch
-     the path - so a legend is needed here where the other charts do without. */
+  /* Lessons per day: single series, so no legend. XP belongs to the same day but
+     runs in the thousands against single-digit lesson counts, so plotting it
+     would need a second axis and flatten these bars; it reads in the tooltip
+     instead, where it is the thing that tells an idle day from a quiet one. */
   $('emptyDaily').hidden = days.length > 0;
   if (days.length) {
     charts.daily = new Chart(freshCanvas('chartDaily'), {
@@ -173,66 +171,18 @@ function buildCharts(d) {
         labels: days.map((x) => shortDate(x.date)),
         datasets: [
           {
-            label: 'Lessons',
             data: days.map((x) => x.lessons),
             backgroundColor: t.s1,
             borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
             borderSkipped: false,
             maxBarThickness: 46,
-            yAxisID: 'y',
-            order: 2,
-          },
-          {
-            type: 'line',
-            label: 'XP',
-            data: days.map((x) => x.xp || 0),
-            borderColor: t.s2,
-            backgroundColor: t.s2,
-            borderWidth: 2,
-            pointRadius: 3,
-            pointHoverRadius: 5,
-            tension: 0.3,
-            yAxisID: 'y1',
-            order: 1, // above the bars
           },
         ],
       },
       options: {
         ...baseOptions(t),
-        scales: {
-          ...baseOptions(t).scales,
-          y: {
-            ...baseOptions(t).scales.y,
-            title: { display: true, text: 'lessons', color: t.muted, font: { size: 10 } },
-          },
-          y1: {
-            position: 'right',
-            beginAtZero: true,
-            // One grid is enough; a second set behind it just adds noise.
-            grid: { drawOnChartArea: false },
-            border: { display: false },
-            ticks: {
-              color: t.muted,
-              callback: (v) => (v >= 1000 ? `${Math.round(v / 100) / 10}k` : v),
-            },
-            title: { display: true, text: 'XP', color: t.muted, font: { size: 10 } },
-          },
-        },
         plugins: {
           ...baseOptions(t).plugins,
-          legend: {
-            display: true,
-            position: 'top',
-            align: 'end',
-            labels: {
-              color: t.ink2,
-              usePointStyle: true,
-              pointStyle: 'circle',
-              boxWidth: 8,
-              boxHeight: 8,
-              padding: 14,
-            },
-          },
           tooltip: {
             ...baseOptions(t).plugins.tooltip,
             callbacks: {
@@ -245,9 +195,6 @@ function buildCharts(d) {
                 });
               },
               label: (c) => {
-                // Both series share one tooltip block, written once from the
-                // bars; the XP line would otherwise repeat every line of it.
-                if (c.datasetIndex !== 0) return [];
                 const row = days[c.dataIndex];
                 const lines = [
                   `${row.lessons} lesson${row.lessons === 1 ? '' : 's'} solved`,
