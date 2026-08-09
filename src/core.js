@@ -615,6 +615,8 @@ function derive({ build, pathData, user, stats, achievements, completedMap, days
           title: a.title,
           description: a.description,
           thumb: a.thumbnailURL,
+          category: a.category,
+          target: a.unlockAtVal,
           at: a.unlockedAt,
         })),
       total: (achievements || []).length,
@@ -622,6 +624,7 @@ function derive({ build, pathData, user, stats, achievements, completedMap, days
         title: a.title,
         description: a.description,
         thumb: a.thumbnailURL,
+        category: a.category,
         target: a.unlockAtVal,
       })),
       streak: (achievements || [])

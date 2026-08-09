@@ -679,12 +679,20 @@ function render(d) {
   renderTable();
 
   /* achievements */
+  /* boot.dev ships the role badges as bare frames - the character art is
+     composited in their own UI, so the asset by itself is an empty shield and
+     the row reads as a hole. The level the badge stands for goes inside it. */
+  const achArt = (a) =>
+    a.category === 'role' && a.target
+      ? `<span class="ach-art"><img src="${a.thumb}" alt="" loading="lazy" /><span class="ach-lvl">${a.target}</span></span>`
+      : `<img src="${a.thumb}" alt="" loading="lazy" />`;
+
   $('achCount').textContent = `${d.achievements.unlocked.length} of ${d.achievements.total} unlocked`;
   $('tabAchCount').textContent = d.achievements.unlocked.length;
   $('achGrid').innerHTML = d.achievements.unlocked
     .map(
       (a) => `<div class="ach" title="${a.description}">
-        <img src="${a.thumb}" alt="" loading="lazy" />
+        ${achArt(a)}
         <div><div class="ach-t">${a.title}</div><div class="ach-d">${shortDate(a.at)}</div></div>
       </div>`
     )
@@ -692,7 +700,7 @@ function render(d) {
   $('achNext').innerHTML = d.achievements.next
     .map(
       (a) => `<div class="ach" title="${a.description}">
-        <img src="${a.thumb}" alt="" loading="lazy" />
+        ${achArt(a)}
         <div><div class="ach-t">${a.title}</div><div class="ach-d">${a.description}</div></div>
       </div>`
     )
@@ -700,7 +708,7 @@ function render(d) {
   $('achStreak').innerHTML = (d.achievements.streak || [])
     .map(
       (a) => `<div class="ach ${a.at ? '' : 'locked'}" title="${a.description}">
-        <img src="${a.thumb}" alt="" loading="lazy" />
+        ${achArt(a)}
         <div><div class="ach-t">${a.title}</div>
         <div class="ach-d">${a.at ? shortDate(a.at) : `${a.target} days`}</div></div>
       </div>`
