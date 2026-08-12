@@ -82,6 +82,28 @@ function parseNuxtPayload(html) {
   return { arr, resolve };
 }
 
+/**
+ * Read a payload field regardless of how boot.dev cased it.
+ *
+ * Their page payloads switched from PascalCase to camelCase (`CompletedAt` ->
+ * `completedAt`, `NumLessons` -> `numLessons`), which silently emptied both
+ * parsers: completed courses disappeared and the path quietly fell back to the
+ * bundled snapshot. Matching case-insensitively survives it flipping either way,
+ * and the whole-word compare keeps `UUID` and `uuid` together, which a
+ * first-letter transform would not.
+ */
+function field(obj, name) {
+  if (!obj || typeof obj !== 'object') return undefined;
+  if (name in obj) return obj[name];
+  const want = name.toLowerCase();
+  for (const k of Object.keys(obj)) {
+    if (k.toLowerCase() === want) return obj[k];
+  }
+  return undefined;
+}
+
+const has = (obj, name) => field(obj, name) !== undefined;
+
 /** Courses the profile page reports as finished, with their completion dates. */
 function parseCompletedCourses(html) {
   const { arr, resolve } = parseNuxtPayload(html);
@@ -89,9 +111,11 @@ function parseCompletedCourses(html) {
   for (let i = 0; i < arr.length; i++) {
     const v = arr[i];
     if (!v || Array.isArray(v) || typeof v !== 'object') continue;
-    if (!('CompletedAt' in v) || !('Slug' in v)) continue;
+    if (!has(v, 'CompletedAt') || !has(v, 'Slug')) continue;
     const c = resolve(i);
-    if (c && c.Slug && c.CompletedAt) seen.set(c.Slug, c.CompletedAt);
+    const slug = field(c, 'Slug');
+    const at = field(c, 'CompletedAt');
+    if (slug && at) seen.set(slug, at);
   }
   return seen; // slug -> ISO date
 }
@@ -107,28 +131,32 @@ function parsePath(html) {
     // the bag itself, depending on how the payload wrapped it.
     const bag = !r || !r.data ? null : Array.isArray(r.data) ? r.data[1] : r.data;
     if (!bag || typeof bag !== 'object') continue;
-    const p = Object.values(bag).find(
-      (x) => x && typeof x === 'object' && Array.isArray(x.Courses) && x.Courses.length
-    );
+    const p = Object.values(bag).find((x) => {
+      const courses = field(x, 'Courses');
+      return x && typeof x === 'object' && Array.isArray(courses) && courses.length;
+    });
     if (!p) continue;
     return {
-      uuid: p.UUID,
-      slug: p.Slug,
-      title: p.Title,
-      months: p.EstimatedCompletionTimeMonths,
+      uuid: field(p, 'UUID'),
+      slug: field(p, 'Slug'),
+      title: field(p, 'Title'),
+      months: field(p, 'EstimatedCompletionTimeMonths'),
       fetchedAt: new Date().toISOString(),
-      courses: p.Courses.map((c) => ({
-        uuid: c.UUID,
-        slug: c.Slug,
-        title: c.Title,
-        type: c.TypeDescription,
-        lessons: c.NumLessons,
-        hours: c.EstimatedCompletionTimeHours,
-        xp: c.CompletionXP,
-        language: c.Language,
-        thumb: c.ThumbnailURL,
-        blurb: c.ShortDescription,
-        chapters: (c.Chapters || []).map((ch) => ({ title: ch.Title, lessons: ch.NumLessons })),
+      courses: field(p, 'Courses').map((c) => ({
+        uuid: field(c, 'UUID'),
+        slug: field(c, 'Slug'),
+        title: field(c, 'Title'),
+        type: field(c, 'TypeDescription'),
+        lessons: field(c, 'NumLessons'),
+        hours: field(c, 'EstimatedCompletionTimeHours'),
+        xp: field(c, 'CompletionXP'),
+        language: field(c, 'Language'),
+        thumb: field(c, 'ThumbnailURL'),
+        blurb: field(c, 'ShortDescription'),
+        chapters: (field(c, 'Chapters') || []).map((ch) => ({
+          title: field(ch, 'Title'),
+          lessons: field(ch, 'NumLessons'),
+        })),
       })),
     };
   }
@@ -140,6 +168,11 @@ async function loadPath(slug) {
   try {
     const p = parsePath(await getHTML(pathURL(slug)));
     if (!p.courses.length) throw new Error('empty course list');
+    // A renamed field reads as undefined rather than throwing, which would sail
+    // through as NaN totals. Fail here instead so the warning names the cause.
+    if (!p.courses.every((c) => typeof c.lessons === 'number' && c.lessons > 0)) {
+      throw new Error('course lesson counts missing: payload field names changed?');
+    }
     cache.path = p;
     cache.pathAt = Date.now();
     return p;
@@ -669,6 +702,12 @@ export async function buildPayload({
   let completedMap = new Map();
   try {
     completedMap = parseCompletedCourses(profileHTML);
+    // Legitimate for someone who has finished nothing, but it is also exactly
+    // what a renamed field looks like, and that failure is otherwise invisible:
+    // every course simply reads as upcoming.
+    if (!completedMap.size) {
+      console.warn('[profile] no completed courses found - none finished, or field names changed?');
+    }
   } catch (err) {
     console.warn('[profile] could not read completed courses:', err.message);
   }
