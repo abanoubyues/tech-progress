@@ -161,20 +161,29 @@ distinguishable for colorblind readers.
 
 ## How it stays current
 
-The page refetches **once an hour**, matching the Worker cron. That is the only
-trigger. Nothing refreshes on tab focus, there is no manual refresh control, and
-**reloading the page does not sync either**: the last payload is cached in
-`localStorage` with the time it was fetched, so a reload inside the hour renders
-from that copy and fetches nothing from boot.dev. The hourly cycle resumes where
-it left off rather than restarting.
+The page refetches **once an hour, on the same tick as the Worker cron** - at
+:59 past the hour plus a 45s lag, so the cron's own fetch and KV write have
+landed and the page reads the row it just wrote rather than racing it. The tick
+is computed in **UTC**, like the cron, so a viewer on a half-hour offset (IST,
+NPT) still lands on it. It is recomputed from the clock after every run, so a
+run that fires late puts the next one back on the tick instead of dragging the
+cycle off it.
 
-One exception, because age alone cannot tell a cached copy it is **wrong**: a
-deploy can change what the payload means minutes after it was stored, and a
-reload would happily redraw the stale copy for the rest of the hour. So each
-payload carries the `build` that produced it, and a reload asks
-**`/api/version`** which build is live. On a mismatch it refetches and restarts
-the hour. That check is a few bytes off the Worker with no upstream call, so a
-reload still is not a sync.
+**Reloading the page does not sync**: the last payload is cached in
+`localStorage` with the time it was fetched, so a reload before the next tick
+renders from that copy and fetches nothing from boot.dev. What makes a copy
+current is that it was taken **after the most recent tick**, not that it is less
+than an hour old - so a reload at :58 will not keep redrawing a copy the cron
+has already superseded, and a reload at :05 does not refetch for nothing.
+
+Two things do trigger a fetch outside the tick. A **deploy** can change what a
+payload means minutes after it was stored, and age alone cannot tell a cached
+copy it is *wrong*, so each payload carries the `build` that produced it and a
+reload asks **`/api/version`** which build is live; on a mismatch it refetches.
+That check is a few bytes off the Worker with no upstream call, so a reload
+still is not a sync. And **returning to a background tab** refetches if a tick
+came and went while its timers were throttled (see below) - only then, so this
+is not a sync on every glance at the tab.
 
 The build id comes from Cloudflare's `[version_metadata]` binding, which stamps
 every deploy - no build step, nothing to bump by hand. Locally it reads `dev`,
@@ -190,9 +199,10 @@ red bar appears if a fetch fails.
 
 One consequence worth knowing: browsers throttle timers in background tabs, so a
 tab left open for a long time can sync late and the stamp will show it (for
-example "4h ago"). That affects only the display. Recorded history is unaffected,
-because the Worker's hourly cron writes it server-side whether or not any tab is
-open. Reloading the page always fetches immediately.
+example "4h ago"). Coming back to the tab is the one moment that reliably gets
+execution time, so that is where a missed tick is caught up. Either way recorded
+history is unaffected, because the Worker's hourly cron writes it server-side
+whether or not any tab is open.
 
 Server-side, profile data is cached for 60s and the curriculum for 6h, so a
 reload is cheap.

@@ -29,8 +29,11 @@ id = "8d7c868a810142ce8bf1f0b2423dafa1"
 
 # Records totals every hour so pace and streak stay accurate on days you do not
 # open the page. Writes only happen when a value actually changed.
+# Minute 59 rather than 0: cron minutes are UTC, and BOOTDEV_TZ is a whole-hour
+# offset, so the last run of a local day lands at 23:59 and captures that day's
+# final total, instead of 00:00 already belonging to the next day.
 [triggers]
-crons = ["0 * * * *"]
+crons = ["59 * * * *"]
 
 [vars]
 BOOTDEV_HANDLE = "the_baaneh"

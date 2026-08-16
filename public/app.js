@@ -3,10 +3,29 @@
    Every chart reads its colors from the CSS custom properties so light and dark
    mode stay in sync with the stylesheet rather than hardcoding hex here. */
 
-// Hourly, matching the Worker's cron. boot.dev totals move slowly, so polling
-// more often just spends requests without showing anything new.
-const REFRESH_MS = 60 * 60 * 1000;
+/* Hourly, on the same wall clock as the Worker's cron rather than an hour from
+   whenever a tab happened to open. boot.dev totals move slowly, so polling more
+   often just spends requests without showing anything new.
+
+   Cron minutes are UTC, so these are too: a viewer on a half-hour offset (IST,
+   NPT) would otherwise land 30 minutes off the tick. The lag gives the cron's
+   own upstream fetch and KV write room to land, so the page reads the row the
+   cron just wrote instead of racing it. */
+const HOUR_MS = 60 * 60 * 1000;
+const TICK_MINUTE = 59;
+const TICK_LAG_MS = 45 * 1000;
 const $ = (id) => document.getElementById(id);
+
+/** When the most recent cron tick landed, at or before `now`. */
+function lastTickAt(now = Date.now()) {
+  const t = new Date(now);
+  t.setUTCMinutes(TICK_MINUTE, 0, 0);
+  const at = t.getTime() + TICK_LAG_MS;
+  return at <= now ? at : at - HOUR_MS;
+}
+
+/** How long to wait for the next one. */
+const msUntilNextTick = (now = Date.now()) => lastTickAt(now) + HOUR_MS - now;
 
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -724,17 +743,22 @@ function showSynced(iso) {
   // toLocaleString with no timeZone renders in the viewer's own device timezone.
   $('synced').title =
     `Last synced ${at.toLocaleString()} (your device time). ` +
-    'The page refreshes itself once an hour.';
+    'The page refreshes itself hourly, just after each hourly recording.';
 }
 
 /* ---------------------------------------------------------------- fetch */
 
 let last = null;
+// When the payload on screen was fetched, cache hits included. Compared against
+// the tick clock to tell a current copy from one the cron has since superseded.
+let lastFetchedAt = 0;
 
 /* Reloading the page must not count as a sync, so the last payload is kept in
-   localStorage with the time it was fetched. Within the hour a reload renders
-   straight from that copy and makes no request at all, which is why the Last
-   synced stamp keeps showing the original time instead of jumping to now.
+   localStorage with the time it was fetched. Until the next tick a reload
+   renders straight from that copy and makes no request at all, which is why the
+   Last synced stamp keeps showing the original time instead of jumping to now.
+   Once a tick has passed, a reload does fetch, so the page never shows a figure
+   the cron has already superseded.
    Bump CACHE_V whenever the payload shape changes, so old copies are discarded. */
 const CACHE_KEY = 'bootdev-progress-cache';
 const CACHE_V = 1;
@@ -775,6 +799,7 @@ async function load(fresh = false) {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     last = data;
+    lastFetchedAt = Date.now();
     writeCache(data);
     // Reveal first: charts built inside a hidden container measure zero.
     reveal();
@@ -872,19 +897,31 @@ setInterval(() => {
   if (last) $('syncedRel').textContent = relTime(last.updatedAt);
 }, 60_000);
 
-/* The hourly tick is the only refetch. Deliberately nothing on tab focus and
-   nothing on reload while the cached copy is still inside the hour, so the sync
-   cadence is genuinely hourly rather than once per page view.
+/* The hourly tick is the only refetch. Deliberately nothing on reload while the
+   cached copy is still current, so the sync cadence stays hourly rather than
+   once per page view.
 
-   A background tab may have its timers throttled, so the display can lag; the
-   Last synced stamp makes that visible. Recorded history is unaffected either
-   way, because the Worker's cron writes it server-side every hour. */
-function scheduleNext(delay) {
-  setTimeout(async () => {
+   Recomputed from the clock after every run rather than chained as a fixed
+   hour, so a run that fires late (see the throttling note below) lands the next
+   one back on the tick instead of dragging the whole cycle off it. */
+let nextTimer;
+function scheduleNext(delay = msUntilNextTick()) {
+  clearTimeout(nextTimer);
+  nextTimer = setTimeout(async () => {
     await load();
-    scheduleNext(REFRESH_MS);
+    scheduleNext();
   }, Math.max(0, delay));
 }
+
+/* Browsers throttle timers in background tabs, so the tick above can fire long
+   after the cron wrote, leaving a stale screen on a tab nobody reloaded. Coming
+   back to the tab is the one moment that reliably gets execution time, so catch
+   up there - but only when a tick actually came and went, which keeps this from
+   turning into a sync on every glance at the tab. */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || lastFetchedAt >= lastTickAt()) return;
+  load().then(() => scheduleNext());
+});
 
 /**
  * Age alone cannot tell a cached payload it is obsolete: a deploy can change
@@ -905,27 +942,29 @@ async function isStaleBuild(build) {
 }
 
 const cached = readCache();
-const age = cached ? Date.now() - cached.fetchedAt : Infinity;
 // Escape hatch, since there is no refresh button: loading /?fresh=1 skips both
 // the cached copy and the Worker's own cache.
 const forceFresh = new URLSearchParams(location.search).get('fresh') === '1';
+// A copy counts as current only if it was taken after the most recent tick, not
+// merely within the last hour. Age alone would let a load at :58 keep redrawing
+// a copy the cron superseded, and would refetch at :05 for nothing.
+const cacheIsCurrent = Boolean(cached) && cached.fetchedAt >= lastTickAt();
 
-if (!forceFresh && age < REFRESH_MS) {
+if (!forceFresh && cacheIsCurrent) {
   try {
     last = cached.payload;
+    lastFetchedAt = cached.fetchedAt;
     // Reveal first: charts built inside a hidden container measure zero.
     reveal();
     render(last);
     // Drawn from cache already, so this resolves behind an up-to-date screen.
-    isStaleBuild(cached.payload.build).then((stale) => {
-      // Resume the existing cycle unless the deploy reset it.
-      if (stale) load().then(() => scheduleNext(REFRESH_MS));
-      else scheduleNext(REFRESH_MS - age);
-    });
+    isStaleBuild(cached.payload.build)
+      .then((stale) => (stale ? load() : null))
+      .then(() => scheduleNext());
   } catch {
     // A cached payload from an incompatible build: fetch instead.
-    load().then(() => scheduleNext(REFRESH_MS));
+    load().then(() => scheduleNext());
   }
 } else {
-  load(forceFresh).then(() => scheduleNext(REFRESH_MS));
+  load(forceFresh).then(() => scheduleNext());
 }
