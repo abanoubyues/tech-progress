@@ -665,16 +665,6 @@ function derive({ build, pathData, user, stats, achievements, completedMap, days
           at: a.unlockedAt,
         })),
       total: (achievements || []).length,
-      streak: (achievements || [])
-        .filter((a) => a.category === 'streak')
-        .sort((a, b) => a.unlockAtVal - b.unlockAtVal)
-        .map((a) => ({
-          title: a.title,
-          description: a.description,
-          thumb: a.thumbnailURL,
-          target: a.unlockAtVal,
-          at: a.unlockedAt,
-        })),
     },
   };
 }

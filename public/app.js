@@ -707,29 +707,27 @@ function render(d) {
   /* achievements */
   /* Grouped by category, and a group is only rendered once something in it has
      actually been unlocked - an empty section says nothing and a category the
-     user has never touched is noise. Streak is the exception: it shows the whole
-     ladder, locked tiers included, because the point of it is what comes next.
-     Anything outside the known set collects under "Other", so a category
-     boot.dev adds later still appears the first time one is earned. */
+     user has never touched is noise. Every section reads the same way: earned
+     only, newest first. Anything outside the known set collects under "Other",
+     so a category boot.dev adds later still appears the first time one is
+     earned. `unlocked` already arrives sorted by date, newest first. */
   const achArt = (a) => `<img src="${a.thumb}" alt="" loading="lazy" />`;
   const unlocked = d.achievements.unlocked || [];
-  const streakLadder = d.achievements.streak || [];
 
-  const tile = (a, sub, locked) =>
-    `<div class="ach ${locked ? 'locked' : ''}" data-tip="${a.description}" tabindex="0">
+  const tile = (a) =>
+    `<div class="ach" data-tip="${a.description}" tabindex="0">
       ${achArt(a)}
-      <div><div class="ach-t">${a.title}</div><div class="ach-d">${sub}</div></div>
+      <div><div class="ach-t">${a.title}</div><div class="ach-d">${shortDate(a.at)}</div></div>
     </div>`;
 
-  const card = (title, note, body) =>
+  const card = (title, note, items) =>
     `<section class="card">
       <div class="sec-head"><h2>${title}</h2><span class="muted">${note}</span></div>
-      <div class="ach-grid">${body}</div>
+      <div class="ach-grid">${items.map(tile).join('')}</div>
     </section>`;
 
   const byCategory = (key) => unlocked.filter((a) => a.category === key);
   const count = (n) => `${n} unlocked`;
-  const earned = (a) => tile(a, shortDate(a.at), false);
 
   // Streak sits between the plain categories and Showdown; Other always last.
   const KNOWN = ['role', 'sharpshooter', 'milestone', 'streak', 'boss'];
@@ -741,31 +739,21 @@ function render(d) {
     ['milestone', 'Milestone'],
   ]) {
     const items = byCategory(key);
-    if (items.length) sections.push(card(label, count(items.length), items.map(earned).join('')));
+    if (items.length) sections.push(card(label, count(items.length), items));
   }
 
-  if (streakLadder.length) {
-    const note = s && s.days !== null ? `currently at ${s.days} days` : '';
-    sections.push(
-      card(
-        'Streak',
-        note,
-        streakLadder
-          .map((a) => tile(a, a.at ? shortDate(a.at) : `${a.target} days`, !a.at))
-          .join('')
-      )
-    );
+  const streak = byCategory('streak');
+  if (streak.length) {
+    // The live count is more use here than a tally of tiers already earned.
+    const note = s && s.days !== null ? `currently at ${s.days} days` : count(streak.length);
+    sections.push(card('Streak', note, streak));
   }
 
   const showdown = byCategory('boss');
-  if (showdown.length) {
-    sections.push(card('Showdown', count(showdown.length), showdown.map(earned).join('')));
-  }
+  if (showdown.length) sections.push(card('Showdown', count(showdown.length), showdown));
 
   const other = unlocked.filter((a) => !KNOWN.includes(a.category));
-  if (other.length) {
-    sections.push(card('Other', count(other.length), other.map(earned).join('')));
-  }
+  if (other.length) sections.push(card('Other', count(other.length), other));
 
   $('achCount').textContent = `${unlocked.length} of ${d.achievements.total} unlocked`;
   $('tabAchCount').textContent = unlocked.length;
