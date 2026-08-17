@@ -583,9 +583,12 @@ function render(d) {
   $('kpiSpentChange').className = `kpi-change${gainedToday ? ' positive' : ''}`;
 
   countUp($('kpiLeft'), d.time.hoursLeft, (v) => `${Math.round(v)}<span class="u">h</span>`);
-  const perDay = d.time.pace.hoursPerDay || d.time.pace.lifetimeHoursPerDay;
+  // The same etaDays the projection uses. Dividing hours left by hours per day
+  // looks equivalent but is not: hours left comes from whole-course accounting
+  // and hours per day from lessons, so the two put a different number of days
+  // on the same screen.
   $('kpiLeftChange').textContent =
-    perDay > 0 ? `${fmt(d.time.hoursLeft / perDay)} days at current pace` : 'no pace recorded yet';
+    d.time.etaDays !== null ? `${fmt(d.time.etaDays)} days at current pace` : 'no pace recorded yet';
 
   /* path ring */
   setRing($('pathRing'), d.stats.pctLessons);
