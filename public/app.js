@@ -613,12 +613,16 @@ function render(d) {
   $('paceLessons').textContent = d.time.pace.lessonsPerDay.toFixed(1);
   $('paceHours').textContent = d.time.pace.hoursPerDay.toFixed(1);
   $('paceToday').textContent = `${today.lessons} lessons`;
+  // This caption sits on the chart, so it has to describe the bars actually
+  // drawn - all of them - and not just the shorter window the pace averages
+  // over, which read as a claim that only 7 bars were shown.
+  const p = d.time.pace;
+  const avg = `${p.lessonsPerDay.toFixed(1)} lessons/day`;
+  const recorded = `${p.recordedDays || 0} day${p.recordedDays === 1 ? '' : 's'} recorded`;
   $('paceNote').textContent =
-    d.time.pace.source === 'recent'
-      ? `rolling ${d.time.pace.windowDays}-day average`
-      : `${d.time.pace.recordedDays || 0} day${
-          d.time.pace.recordedDays === 1 ? '' : 's'
-        } recorded, using lifetime average so far`;
+    p.source === 'recent'
+      ? `${recorded}, last ${p.windowDays} average ${avg}`
+      : `${recorded}, lifetime average ${avg}`;
 
   /* current course */
   if (d.current) {
@@ -698,36 +702,71 @@ function render(d) {
   renderTable();
 
   /* achievements */
+  /* Grouped by category, and a group is only rendered once something in it has
+     actually been unlocked - an empty section says nothing and a category the
+     user has never touched is noise. Streak is the exception: it shows the whole
+     ladder, locked tiers included, because the point of it is what comes next.
+     Anything outside the known set collects under "Other", so a category
+     boot.dev adds later still appears the first time one is earned. */
   const achArt = (a) => `<img src="${a.thumb}" alt="" loading="lazy" />`;
+  const unlocked = d.achievements.unlocked || [];
+  const streakLadder = d.achievements.streak || [];
 
-  $('achCount').textContent = `${d.achievements.unlocked.length} of ${d.achievements.total} unlocked`;
-  $('tabAchCount').textContent = d.achievements.unlocked.length;
-  $('achGrid').innerHTML = d.achievements.unlocked
-    .map(
-      (a) => `<div class="ach" title="${a.description}">
-        ${achArt(a)}
-        <div><div class="ach-t">${a.title}</div><div class="ach-d">${shortDate(a.at)}</div></div>
-      </div>`
-    )
-    .join('');
-  $('achNext').innerHTML = d.achievements.next
-    .map(
-      (a) => `<div class="ach" title="${a.description}">
-        ${achArt(a)}
-        <div><div class="ach-t">${a.title}</div><div class="ach-d">${a.description}</div></div>
-      </div>`
-    )
-    .join('');
-  $('achStreak').innerHTML = (d.achievements.streak || [])
-    .map(
-      (a) => `<div class="ach ${a.at ? '' : 'locked'}" title="${a.description}">
-        ${achArt(a)}
-        <div><div class="ach-t">${a.title}</div>
-        <div class="ach-d">${a.at ? shortDate(a.at) : `${a.target} days`}</div></div>
-      </div>`
-    )
-    .join('');
-  $('streakAchNote').textContent = s && s.days !== null ? `currently at ${s.days} days` : '';
+  const tile = (a, sub, locked) =>
+    `<div class="ach ${locked ? 'locked' : ''}" data-tip="${a.description}" tabindex="0">
+      ${achArt(a)}
+      <div><div class="ach-t">${a.title}</div><div class="ach-d">${sub}</div></div>
+    </div>`;
+
+  const card = (title, note, body) =>
+    `<section class="card">
+      <div class="sec-head"><h2>${title}</h2><span class="muted">${note}</span></div>
+      <div class="ach-grid">${body}</div>
+    </section>`;
+
+  const byCategory = (key) => unlocked.filter((a) => a.category === key);
+  const count = (n) => `${n} unlocked`;
+  const earned = (a) => tile(a, shortDate(a.at), false);
+
+  // Streak sits between the plain categories and Showdown; Other always last.
+  const KNOWN = ['role', 'sharpshooter', 'milestone', 'streak', 'boss'];
+  const sections = [];
+
+  for (const [key, label] of [
+    ['role', 'Role'],
+    ['sharpshooter', 'Sharpshooter'],
+    ['milestone', 'Milestone'],
+  ]) {
+    const items = byCategory(key);
+    if (items.length) sections.push(card(label, count(items.length), items.map(earned).join('')));
+  }
+
+  if (streakLadder.length) {
+    const note = s && s.days !== null ? `currently at ${s.days} days` : '';
+    sections.push(
+      card(
+        'Streak',
+        note,
+        streakLadder
+          .map((a) => tile(a, a.at ? shortDate(a.at) : `${a.target} days`, !a.at))
+          .join('')
+      )
+    );
+  }
+
+  const showdown = byCategory('boss');
+  if (showdown.length) {
+    sections.push(card('Showdown', count(showdown.length), showdown.map(earned).join('')));
+  }
+
+  const other = unlocked.filter((a) => !KNOWN.includes(a.category));
+  if (other.length) {
+    sections.push(card('Other', count(other.length), other.map(earned).join('')));
+  }
+
+  $('achCount').textContent = `${unlocked.length} of ${d.achievements.total} unlocked`;
+  $('tabAchCount').textContent = unlocked.length;
+  $('achSections').innerHTML = sections.join('');
 
   showSynced(d.updatedAt);
 }

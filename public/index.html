@@ -113,12 +113,12 @@
         <div class="kpi-change" id="kpiLessonsChange"></div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Time spent <span class="est" title="Curriculum hour estimates, not tracked study time">est.</span></div>
+        <div class="kpi-label">Time spent <span class="est" data-tip="Curriculum hour estimates, not tracked study time" tabindex="0">est.</span></div>
         <div class="kpi-value" id="kpiSpent">0h</div>
         <div class="kpi-change" id="kpiSpentChange"></div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Time left <span class="est" title="Curriculum hour estimates, not tracked study time">est.</span></div>
+        <div class="kpi-label">Time left <span class="est" data-tip="Curriculum hour estimates, not tracked study time" tabindex="0">est.</span></div>
         <div class="kpi-value" id="kpiLeft">0h</div>
         <div class="kpi-change" id="kpiLeftChange"></div>
       </div>
@@ -147,7 +147,7 @@
         <section class="card current" id="currentCard">
           <div class="sec-head">
             <h2>Currently on</h2>
-            <span class="est" title="boot.dev does not publish per-lesson progress. This is derived from your lesson count and the path order.">estimated</span>
+            <span class="est" data-tip="boot.dev does not publish per-lesson progress. This is derived from your lesson count and the path order." tabindex="0">estimated</span>
           </div>
           <div class="current-body">
             <img id="curThumb" class="cur-thumb" alt="" />
@@ -171,7 +171,7 @@
               <div>
                 <div class="kpi-label">
                   Current streak
-                  <span class="est" id="streakEst" title="boot.dev keeps the live streak counter behind login. This is estimated from your streak achievements, which is only ever approximate.">est.</span>
+                  <span class="est" id="streakEst" data-tip="boot.dev keeps the live streak counter behind login. This is estimated from your streak achievements, which is only ever approximate." tabindex="0">est.</span>
                 </div>
                 <div class="kpi-value streak-val">
                   <span class="flame" aria-hidden="true">🔥</span><span id="streakDays">0</span><span class="u">days</span>
@@ -190,7 +190,7 @@
           <section class="card tile">
             <div class="kpi-label">
               Projected finish
-              <span class="est" title="Derived from your recent daily pace, recorded locally">est.</span>
+              <span class="est" data-tip="Derived from your recent daily pace, recorded locally" tabindex="0">est.</span>
             </div>
             <div class="kpi-value" id="eta">n/a</div>
             <div class="kpi-change" id="etaSub"></div>
@@ -310,30 +310,14 @@
   </div>
 
   <!-- ====================================================== ACHIEVEMENTS -->
+  <!-- Sections are built in app.js: which categories exist depends on what has
+       actually been unlocked, and an empty one is not rendered at all. -->
   <div id="panel-achievements" class="panel" hidden>
-    <section class="card">
-      <div class="sec-head">
-        <h2>Unlocked</h2>
-        <span class="muted" id="achCount"></span>
-      </div>
-      <div class="ach-grid" id="achGrid"></div>
-    </section>
-
-    <section class="card">
-      <div class="sec-head">
-        <h2>Next up</h2>
-        <span class="muted">closest milestones you have not earned yet</span>
-      </div>
-      <div class="ach-grid next" id="achNext"></div>
-    </section>
-
-    <section class="card">
-      <div class="sec-head">
-        <h2>Streak milestones</h2>
-        <span class="muted" id="streakAchNote"></span>
-      </div>
-      <div class="ach-grid" id="achStreak"></div>
-    </section>
+    <div class="sec-head">
+      <h2>Achievements</h2>
+      <span class="muted" id="achCount"></span>
+    </div>
+    <div id="achSections"></div>
   </div>
 
   <footer class="foot">

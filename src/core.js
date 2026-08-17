@@ -248,8 +248,18 @@ async function recordToday(store, { xp, lessons, hours }, today) {
   return { days, wrote: true };
 }
 
-/** Per-day gains over the trailing window. */
-function computePace(days, { hoursDone, lessonsDone, daysActive }, today) {
+/**
+ * Per-day gains over the trailing window.
+ *
+ * Daily hours are derived from that day's lessons rather than from the recorded
+ * hours total. Course hours are credited in a lump the moment a course is
+ * finished, so the raw figure produced days of 40+ "hours" and dragged the
+ * rolling average to a pace nobody keeps - one finished course was reading as
+ * two days of round-the-clock study. Lessons accrue one at a time, so they are
+ * the honest rate, and `hoursPerLesson` converts them back at the path's own
+ * ratio. Summed over the whole path the two agree exactly.
+ */
+function computePace(days, { lessonsDone, daysActive, hoursPerLesson }, today) {
   // Consecutive rows can be several days apart if nothing recorded in between,
   // so spread each gain across the days it covers rather than spiking one day.
   const series = [];
@@ -259,14 +269,14 @@ function computePace(days, { hoursDone, lessonsDone, daysActive }, today) {
     const span = Math.max(1, daysBetweenKeys(prev.date, cur.date));
     const gain = {
       lessons: Math.max(0, cur.lessons - prev.lessons),
-      hours: Math.max(0, cur.hours - prev.hours),
       xp: Math.max(0, cur.xp - prev.xp),
     };
     for (let k = span; k >= 1; k--) {
+      const lessons = Math.round((gain.lessons / span) * 10) / 10;
       series.push({
         date: shiftKey(cur.date, -(k - 1)),
-        lessons: Math.round((gain.lessons / span) * 10) / 10,
-        hours: Number((gain.hours / span).toFixed(2)),
+        lessons,
+        hours: Number((lessons * hoursPerLesson).toFixed(2)),
         xp: Math.round(gain.xp / span),
         // True when the value is a share of a multi-day gap, not an observed day.
         spread: span > 1,
@@ -275,8 +285,8 @@ function computePace(days, { hoursDone, lessonsDone, daysActive }, today) {
   }
 
   const window = series.slice(-PACE_WINDOW_DAYS);
-  const lifetimeHours = daysActive ? hoursDone / daysActive : 0;
   const lifetimeLessons = daysActive ? lessonsDone / daysActive : 0;
+  const lifetimeHours = lifetimeLessons * hoursPerLesson;
 
   const lifetime = {
     source: 'lifetime',
@@ -286,6 +296,7 @@ function computePace(days, { hoursDone, lessonsDone, daysActive }, today) {
     xpPerDay: 0,
     series,
     lifetimeHoursPerDay: lifetimeHours,
+    lifetimeLessonsPerDay: lifetimeLessons,
     recordedDays: series.length,
   };
 
@@ -300,6 +311,7 @@ function computePace(days, { hoursDone, lessonsDone, daysActive }, today) {
     xpPerDay: sum('xp') / window.length,
     series,
     lifetimeHoursPerDay: lifetimeHours,
+    lifetimeLessonsPerDay: lifetimeLessons,
     recordedDays: series.length,
   };
 }
@@ -540,7 +552,11 @@ function derive({ build, pathData, user, stats, achievements, completedMap, days
   const daysActive = joined ? Math.max(1, Math.round((Date.now() - joined) / 86400000)) : null;
 
   const hoursPerDay = pace.hoursPerDay > 0 ? pace.hoursPerDay : pace.lifetimeHoursPerDay;
-  const etaDays = hoursPerDay > 0 ? Math.round(hoursLeft / hoursPerDay) : null;
+  // Projected from lessons, which tick up one at a time, rather than from hours,
+  // which arrive in a lump per finished course and would put the finish months early.
+  const lessonsPerDay = pace.lessonsPerDay > 0 ? pace.lessonsPerDay : pace.lifetimeLessonsPerDay;
+  const lessonsLeft = Math.max(0, totalLessons - lessonsDone);
+  const etaDays = lessonsPerDay > 0 ? Math.round(lessonsLeft / lessonsPerDay) : null;
   const etaDate = etaDays !== null ? new Date(Date.now() + etaDays * 86400000).toISOString() : null;
 
   const todayKey = days.length ? days[days.length - 1].date : null;
@@ -551,10 +567,6 @@ function derive({ build, pathData, user, stats, achievements, completedMap, days
       : { date: todayKey, lessons: 0, hours: 0, xp: 0 };
 
   const unlocked = (achievements || []).filter((a) => a.unlockedAt);
-  const nextUp = (achievements || [])
-    .filter((a) => !a.unlockedAt && a.unlockAtVal > 0)
-    .sort((a, b) => a.unlockAtVal - b.unlockAtVal)
-    .slice(0, 4);
 
   return {
     build,
@@ -653,13 +665,6 @@ function derive({ build, pathData, user, stats, achievements, completedMap, days
           at: a.unlockedAt,
         })),
       total: (achievements || []).length,
-      next: nextUp.map((a) => ({
-        title: a.title,
-        description: a.description,
-        thumb: a.thumbnailURL,
-        category: a.category,
-        target: a.unlockAtVal,
-      })),
       streak: (achievements || [])
         .filter((a) => a.category === 'streak')
         .sort((a, b) => a.unlockAtVal - b.unlockAtVal)
@@ -737,9 +742,14 @@ export async function buildPayload({
   const joined = user.CreatedAt ? new Date(user.CreatedAt) : null;
   const daysActive = joined ? Math.max(1, Math.round((Date.now() - joined) / 86400000)) : null;
 
+  // The path's own hours-per-lesson, used to express a day's lessons as hours.
+  const pathLessons = courses.reduce((a, c) => a + c.lessons, 0);
+  const pathHours = courses.reduce((a, c) => a + c.hours, 0);
+  const hoursPerLesson = pathLessons ? pathHours / pathLessons : 0;
+
   const pace = computePace(
     days,
-    { hoursDone, lessonsDone: stats.LessonsCompleted || 0, daysActive },
+    { lessonsDone: stats.LessonsCompleted || 0, daysActive, hoursPerLesson },
     today
   );
   const streak = deriveStreak(achievements, days, today, tz, streakSince);
